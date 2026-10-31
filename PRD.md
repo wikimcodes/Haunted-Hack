@@ -442,177 +442,158 @@ A cosmetic animation must never reveal which monster is the spy unless that info
 
 # 7. Sponsor Integration
 
+Both sponsor products are load-bearing. Terse is each monster's body and memory. Agent Relay is how the monsters whisper. Every witch clue links back to the Relay message that caused it, so the Director View shows both products working together.
+
 ## 7.1 Terse Durable Actors
 
-### Sponsor Objective
+### What Terse Is
 
-Demonstrate persistent, stateful, real-time applications using Durable Actors.
+A durable actor is a tiny server with its own SQLite database, addressed by an ID (for example `GameActor.get("game_001")`). It handles one call at a time, saves every write before the call returns, goes dormant after about 10 seconds idle, and wakes on the next call with its state intact.
 
-### Our Usage
+Docs: https://docs.useterse.ai (quickstart, concepts, TypeScript reference). Examples: https://github.com/TerseAI/durable-actors/tree/main/examples (`ai-chat`, `chat` are the closest to us).
 
-Terse maintains the authoritative game state.
+### Features We Use
 
-The game must persist independently of a browser session.
+| Terse feature | What it does | How we use it |
+|---|---|---|
+| `@Persisted` | Saves a field each time it is assigned | Spy identity, deadline, clues, conversations, monster memory |
+| `@Emittable` | Pushes a public field to every connected client (`state` on connect, `state_update` on change) | The public game state. Replaces a custom event stream |
+| Alarms (`this.alarm.set`, `onAlarm`) | Wakes the actor at a set time, even while dormant | Witch reveals and dawn. No polling loop |
+| One call at a time (mailbox) | Calls run in order, never overlap | Atomic accusation: the first valid accusation wins, and it cannot race the dawn alarm |
+| WebSockets (`prepareWebsocket`, `broadcast`, `setTags`) | Clients connect through the gateway; the socket stays open while the actor sleeps | Live multiplayer; `player` and `director` socket tags |
+| Per-actor SQLite (`this.db`) | Private database per actor | Append-only event log for the Director View timeline |
+| `terse deploy` | Hosts actors at a public URL | Live demo URL judges can open on their phones |
 
-### Proposed Actor Design
+### Actor Design
 
-**GameActor — One per game session**
+**GameActor, one per session (ID = `sessionId`)**
 
-Responsible for:
+- `@Persisted spyId` (private, never `@Emittable`).
+- `@Persisted deadlineAt`, `nextRevealAt`, `round`, `accusation`.
+- `@Persisted` witch state: received reports, pending report IDs.
+- `@Persisted @Emittable publicState`: phase, deadline, round, public monster moods, revealed clues, `accusationUsed`.
+- `events` table in `this.db`: every state change with a sequence number.
+- One alarm, always set to `min(nextRevealAt, deadlineAt)`. `onAlarm` either reveals a clue and re-arms, or ends the game at dawn.
 
-- Session status.
-- Hidden spy identity.
-- Countdown deadline.
-- Round number.
-- Accusation state.
-- Win/loss validation.
-- Communication rules.
-- Clue history.
-- Authoritative event sequence.
+Because the spy is never an `@Emittable` field, the public projection is enforced by the actor itself rather than by deleting fields before sending.
 
-**MonsterActor — One per monster, per session (stretch architecture)**
+**MonsterActor, one per monster per session (ID = `${sessionId}:${monsterId}`)**
 
-Responsible for:
+- `@Persisted` conversation history with the player.
+- `@Persisted knownFacts` (facts heard from the player or from gossip).
+- `@Persisted gossipSentThisRound`.
+- `@Persisted` Relay agent name for this monster.
 
-- Character-specific interaction history.
-- Knowledge.
-- Non-sensitive personality state.
-- Gossip activity.
-- Agent activity status.
+Monster actors are cheap and make the pitch concrete: each monster has its own memory and its own database. The witch stays inside GameActor so there is a single alarm and a single source of truth for reveals.
 
-**WitchActor — Optional**
+### Rules for Using Actors
 
-Responsible for:
+- **Keep OpenAI calls outside the actor.** An actor holds its mailbox while it awaits, so a 3-second model call would block every other call. Follow the `ai-chat` example: the game server calls OpenAI, then saves the result to the actor in one call. Avoid `@Interleave` on GameActor, because it disables `this.db.transaction`, which the accusation needs.
+- **Reassign arrays and objects to persist them.** `this.clues = [...this.clues, clue]`, never `this.clues.push(clue)`.
+- **Wrap the accusation in `this.db.transaction`** so the outcome, phase and event log are saved together.
+- **Regenerate the client** (`terse actor generate`) after changing actor methods.
 
-- Reports received from the spy.
-- Unrevealed intelligence.
-- Reveal scheduling state.
-- Public reveal history.
+### Live Sponsor Demo
 
-### MVP Recommendation
-
-Start with **one GameActor containing the three monsters' state and witch state**.
-
-This is much simpler to implement and debug within five hours.
-
-Only split into separate MonsterActors if the core game and integrations already work.
-
-### Why Terse Matters
-
-Terse is not just a place to store chat history.
-
-It provides durable state for a game session that can survive client refreshes and reconnects, coordinate state changes, and synchronize events.
-
-**Live Sponsor Demo:**
-
-1. Start the game.
+1. Start a game on a laptop and on a phone (same session). Both see the same countdown.
 2. Talk to two monsters.
-3. Observe the witch countdown.
-4. Refresh the browser.
-5. Verify the game resumes without resetting the spy identity, timer, or conversation history.
-6. Open another client with the same session and observe synchronized public state.
+3. **Close every tab.** Wait past the next reveal time.
+4. Reopen. The witch has already spoken while nobody was connected, because the alarm woke the dormant actor.
+5. The spy, timer and conversations are unchanged.
 
-Time should be represented using an absolute server-side deadline rather than relying on a browser interval.
-
-A backend scheduling or polling mechanism must trigger overdue reveals; persistence alone does not automatically execute scheduled callbacks.
+Step 3 is the moment that shows durability. A plain refresh is expected; a witch who keeps working with no one in the room is not.
 
 ## 7.2 Agent Relay
 
-### Sponsor Objective
+### What Agent Relay Is
 
-Demonstrate meaningful communication between independent agents.
+Agent Relay is a messaging layer for AI agents. It has two layers:
 
-### Our Usage
+- **CLI (`agent-relay`)** connects coding agents (Claude Code, Codex) so they can message each other. Not what we need.
+- **Relaycast API** is the engine underneath: agent identities with their own tokens, DMs, channels, durable deliveries with acknowledgements, a workspace event log and a live observer stream. This is what we build on.
 
-Agent Relay enables communication between monster agents and the witch.
+Docs: https://agentrelay.com/docs/relaycast-api and the OpenAPI spec at https://github.com/AgentWorkforce/relaycast/blob/main/openapi.yaml. Hosted base URL: `https://armadillo.agentrelay.com/v1`. A self-hosted engine (`@relaycast/engine`, port 8787) is the fallback if the hosted one is unreachable.
 
-At minimum:
+No bridge to coding-agent sessions is needed. The monsters and the witch are registered as real Relay agents.
 
-- Two independently running agent sessions.
-- A successful message sent through Agent Relay.
-- A receiver that processes the message.
-- A resulting change in game behavior.
+### Features We Use
 
-### Primary Communication Flow
+| Relay feature | Endpoint | How we use it |
+|---|---|---|
+| Workspace | `POST /workspaces` | One workspace for the event; returns the workspace key |
+| Agent identities | `POST /agents` | Register `sprout`, `pebble`, `momo`, `witch`. Each gets its own agent token |
+| DMs | `POST /dm` | Monster-to-monster gossip, and the spy's report to the witch |
+| Message metadata | `metadata` on messages | Carries `sessionId`, `round`, `factIds` with each message |
+| Idempotency | `Idempotency-Key` header | Our `requestId`, so retries never send a whisper twice |
+| Inbox / deliveries | `GET /inbox`, `GET /deliveries`, `POST /deliveries/{id}/ack` | Each agent process receives and acknowledges its messages |
+| Observer stream | `POST /observer-tokens`, `GET /v1/ws` | Director View shows whispers live, read-only |
+| Audit reads | `GET /dm/conversations/all` | Post-game proof of every DM |
+
+### Agent Processes
+
+Each monster and the witch runs as its own small Node/Bun process holding only its own agent token:
+
+- **Monster agent:** polls its inbox, acks deliveries, asks OpenAI whether to gossip (structured output), and sends gossip with `POST /dm` using its own token.
+- **Spy (whichever monster was assigned):** additionally DMs the witch with a report.
+- **Witch agent:** reads its inbox and accepts a report only if the Relay-authenticated sender equals the session's `spyId`. Accepted reports are written to GameActor with their `relayMessageId`.
+
+Relay authenticates the sender from the agent token, so `sourceMonsterId` comes from Relay, not from a field the agent fills in. This is the identity check required in 9.6.
+
+The game server tells each agent process its private role for a session through the agent's own config, never through a Relay message other agents could read.
+
+### Communication Flow
 
 ```text
 Player
-  |
+  |  chat (game server -> OpenAI -> MonsterActor)
   v
-Monster A Agent
-  |
-  | Private gossip
+Sprout agent
+  |  POST /dm  (gossip, metadata: factIds)
   v
-Monster B Agent (Spy)
-  |
-  | Agent Relay report
+Pebble agent (SPY)
+  |  POST /dm  (report to witch)
   v
-Witch Agent
-  |
-  | Report received
+Witch agent
+  |  sender == spyId ? accept : drop
   v
-Game Orchestrator
-  |
+Terse GameActor  (stores report + relayMessageId; alarm reveals clue)
+  |  @Emittable state_update
   v
-Terse GameActor
+All player screens
 ```
 
-Only the spy has permission to send a valid witch report.
+### Hackathon Integration Priority (first hour)
 
-Other monsters can gossip but cannot directly submit information to the witch.
+1. Create a workspace and register two agents.
+2. Agent A sends a DM to agent B.
+3. Agent B reads it from its inbox and acks the delivery.
+4. Open the observer stream and see the message arrive.
+5. Agent B writes the message into a Terse actor.
 
-### Real Integration Requirement
-
-Agent Relay messages must actually travel between independent agent sessions.
-
-A backend function passing JSON between two OpenAI calls does not qualify as real Agent Relay integration.
-
-Since Agent Relay is oriented toward independent coding-agent sessions, a lightweight bridge is needed to connect these sessions with the game's backend.
-
-### Hackathon Integration Priority
-
-First, verify:
-
-1. Two agent sessions can connect to Agent Relay.
-2. Agent A can send a message.
-3. Agent B can receive it.
-4. The receiver can acknowledge it.
-5. A message can be forwarded into the game backend.
-
-Only then add the full game narrative.
+Only then add the game narrative.
 
 ### Sponsor Demo
 
-At the end of the game, open Director View to display actual Agent Relay messages.
-
-Example:
+The Director View shows the live observer stream during the game (blurred for players, visible to the director socket) and the full audit after it. Clicking a witch clue highlights the exact Relay message that caused it, with its message ID and timestamp.
 
 ```text
-[Spy Agent → Witch Agent]
+[pebble -> witch]  msg_8f2c  15:42:07
+"The human mentioned a blue flame by the window."
 
-The player told me that they saw a blue flame.
-
-[Witch Agent → Game Orchestrator]
-
-Report received.
-
-[Game Event]
-
-WITCH_REPORT_RECEIVED
+[Terse GameActor]  event #41  WITCH_REPORT_ACCEPTED  relayMessageId=msg_8f2c
+[Terse GameActor]  event #44  WITCH_REVEAL  clue_2 (sources: msg_8f2c)
 ```
 
-The final demonstration should prove that the private message exchange happened through Agent Relay.
+Nothing is fabricated: every line comes from Relay's API or the actor's event table.
 
 ## 7.3 OpenAI
 
 OpenAI powers:
 
-- Monster dialogue.
-- Character personality.
-- Conversational responses.
-- Agent reasoning.
-- Gossip decisions.
-- Witch clue phrasing.
+- Monster dialogue and personality.
+- Gossip decisions, returned as **structured output**: `{ reply, gossipTo, factIds }`. The server validates every field before anything is sent through Relay.
+- Witch clue wording, filled into a clue template the server has already chosen.
+- **Stretch:** OpenAI text-to-speech for the witch's reveal lines.
 
 OpenAI does not control:
 
@@ -625,51 +606,49 @@ OpenAI does not control:
 
 All structured agent outputs must pass server-side validation.
 
+## 7.4 Other Sponsors
+
+Supabase, Mastra, Freestyle and Superserve are not used. They would add integration work without strengthening the Terse or Agent Relay prizes.
+
 # 8. Backend Architecture
 
 ## 8.1 High-Level Architecture
 
 ```text
-                  PLAYER
+              PLAYERS (laptop + phones)
                     |
+     WebSocket via Terse gateway (state, state_update)
+                    |
+        React + React Three Fiber frontend
+                    |  HTTP: start / chat / accuse
                     v
-        React + Three.js Frontend
+              Game API Server --------> OpenAI
                     |
-                    v
-             Game API Server
-                    |
-          +---------+---------+
-          |                   |
-          v                   v
-   Terse GameActor      Game Orchestrator
-   - Session            - Agent dispatch
-   - Hidden Spy          - Dialogue handling
-   - Timer               - Message validation
-   - Win/Loss            - Reveal preparation
-   - Knowledge
-   - Events
+        +-----------+-------------+
+        |                         |
+        v                         v
+ Terse GameActor          Terse MonsterActor x3
+ - spyId (private)        - conversation memory
+ - deadline + alarm       - known facts
+ - witch reports          - gossip quota
+ - clues (emitted)
+ - event log (SQLite)
+        ^
+        | accepted reports (with relayMessageId)
+        |
+   Witch agent  <--- DM ---  Spy agent  <--- DM ---  Monster agent
+        \______________ Agent Relay (Relaycast API) ______________/
                               |
-                              v
-                       OpenAI / Agents
-                              |
-                              v
-                         Agent Relay
-                              |
-                    +---------+---------+
-                    |                   |
-                    v                   v
-                Monster Agent       Witch Agent
+                     observer stream -> Director View
 ```
 
 ### Trust Boundary
 
 The GameActor is the authoritative source for game rules and results.
 
-The agent layer can submit proposed dialogue, gossip, and reporting actions.
+Agent processes can propose dialogue, gossip and reports. Relay authenticates who sent each message; the server validates what it says.
 
-The backend validates every proposed action.
-
-The frontend receives only authorized public information.
+The frontend receives only `@Emittable` public state. Private events go only to sockets tagged `director`, and only after the game ends.
 
 # 9. Backend Data Schemas
 
@@ -860,6 +839,8 @@ Only `sourceMonsterId === spyId` may generate a valid WitchReport.
 
 The backend should verify the sender's authenticated agent identity rather than trusting the submitted `sourceMonsterId`.
 
+`sourceMonsterId` is taken from the Relay message's sender, which Relay sets from the agent token that posted it (see 7.2). The agent never fills it in itself.
+
 ## 9.7 Witch State and Reveals
 
 ```typescript
@@ -1007,9 +988,18 @@ This state is purely presentational.
 
 It must not become the authoritative source of timer, role, or outcome data.
 
-## 10.4 Server-Sent Events
+## 10.4 Live Updates (Terse WebSocket)
 
-Suggested event envelope:
+The frontend does not need a custom event stream. It connects to GameActor through the Terse WebSocket gateway:
+
+1. The game server calls `actors.GameActor.prepareWebsocket({ actorId: sessionId, metadata: { playerId } })` and returns the `websocketUrl` to the browser.
+2. On connect, the browser receives `{ type: "state", state }` with every `@Emittable` field (the `PublicGameState`).
+3. After each change it receives `{ type: "state_update", changes }`.
+4. Short-lived animation cues (a monster starts talking, the witch glows) are sent with `this.broadcast(event, { tags: ["player"] })` using the envelope below.
+
+Reconnecting simply reopens the socket and receives the current `state` again, so sequence-number resume logic is not needed for the MVP.
+
+Event envelope for broadcast cues:
 
 ```typescript
 interface GameEvent {
@@ -1036,7 +1026,7 @@ interface GameEvent {
 
 Use a discriminated union with per-event payload validation in the actual implementation.
 
-Private events such as `WITCH_REPORT_RECEIVED` must not be broadcast to player clients.
+Private events such as `WITCH_REPORT_RECEIVED` must not be broadcast to player clients. They are sent only to sockets tagged `director`, and only once the game has ended.
 
 ## 10.5 Monster Animation Mapping
 
@@ -1055,7 +1045,7 @@ A normal player's client should not be told that the spy is currently gossiping.
 
 # 11. Backend API Contract
 
-The exact transport may be HTTP plus WebSocket or Server-Sent Events.
+Actions (start, chat, accuse) are HTTP calls to the game server. Live state comes from the Terse WebSocket (10.4).
 
 ## POST /api/game/start
 
@@ -1130,11 +1120,27 @@ Response:
 }
 ```
 
-## GET /api/game/:sessionId/events
+## POST /api/game/:sessionId/socket
 
-Returns the authorized public event stream.
+Request:
 
-The frontend uses event sequence numbers to resume after reconnecting.
+```json
+{
+  "role": "player"
+}
+```
+
+Response:
+
+```json
+{
+  "websocketUrl": "wss://..."
+}
+```
+
+The server calls Terse `prepareWebsocket` and tags the socket `player`. A `director` socket is only granted after the game has ended. The browser must open the socket before the grant's `connectByMs` deadline.
+
+The chat `requestId` is reused as the Agent Relay `Idempotency-Key` header for any gossip that chat triggers.
 
 ## GET /api/game/:sessionId/director
 
@@ -1273,6 +1279,10 @@ Use actual received Relay messages.
 
 Do not fabricate logs.
 
+Source: Relay's observer stream (`GET /v1/ws` with an observer token) while the game runs, and `GET /dm/conversations/all` for the full audit afterwards.
+
+**Live mode (stretch):** during the game, a second screen for the judges shows the observer stream with message content blurred, so they can see whispers happen in real time without spoiling the player.
+
 ### Panel B — Terse State Timeline
 
 Display:
@@ -1284,6 +1294,10 @@ Display:
 - Witch report received.
 - Clue revealed.
 - Accusation resolved.
+
+Source: GameActor's `events` table in its SQLite database, each with a sequence number.
+
+Clicking a clue in Panel B highlights the Relay message in Panel A that caused it, using the clue's `sourceReportIds` and each report's `relayMessageId`. This is the moment that shows both sponsor products working together.
 
 ### Panel C — Information Flow
 
@@ -1366,26 +1380,30 @@ Agent outputs must be validated against strict action schemas.
 
 ## 11:00–12:00 — Technical Validation
 
-**Backend**
-- Initialize Terse.
-- Create a persistent GameActor.
-- Test a session surviving refresh.
-- Connect two independent Agent Relay sessions.
-- Verify a real message round trip.
+**Backend (Terse)**
+- `bunx terse-cli@latest install`, `terse init`, run `terse actor dev`.
+- Create GameActor with one `@Persisted @Emittable` field and an alarm.
+- Confirm the alarm fires while no client is connected.
+
+**Backend (Agent Relay)**
+- `POST /workspaces`, then `POST /agents` for two test agents.
+- Agent A sends `POST /dm` to agent B; B reads `GET /inbox` and acks.
+- Open the observer stream and see the message arrive.
+- B writes the message into the GameActor.
 
 **Frontend**
 - Initialize React Three Fiber.
 - Import a basic Blender scene.
 - Load three placeholder monster models.
 
-**Milestone:** Both sponsor integrations are technically verified.
+**Milestone:** A real Relay DM lands in a real Terse actor, and an actor alarm fires on its own.
 
 ## 12:00–1:00 — Core Game Engine
 
 **Backend**
 - Randomize hidden spy identity.
 - Implement immutable win/loss conditions.
-- Implement server-side countdown.
+- Implement the countdown with `deadlineAt` and the actor alarm.
 - Add chat endpoint.
 - Integrate OpenAI dialogue.
 - Save conversations.
@@ -1402,10 +1420,11 @@ Agent outputs must be validated against strict action schemas.
 
 **Backend**
 - Implement private gossip rules.
-- Connect spy reporting through Agent Relay.
-- Implement WitchReport ingestion.
+- Register sprout, pebble, momo and witch as Relay agents; start one process per agent.
+- Gossip via `POST /dm`; spy reports via DM to the witch.
+- Witch accepts a report only if the Relay sender equals `spyId`.
 - Generate a valid clue.
-- Store and publish witch reveals.
+- Store reports with `relayMessageId`; reveal clues from `onAlarm`.
 
 **Frontend**
 - Create witch reveal UI.
@@ -1419,7 +1438,7 @@ Agent outputs must be validated against strict action schemas.
 **Backend**
 - Accusation endpoint.
 - Timeout and loss conditions.
-- Event stream.
+- Player sockets via `prepareWebsocket`; second device joins the same game.
 - Post-game reveal data.
 
 **Frontend**
@@ -1432,6 +1451,8 @@ Agent outputs must be validated against strict action schemas.
 
 ## 3:00–4:00 — Polish and Submission
 
+- `terse deploy` for a public demo URL.
+- Rehearse the "close every tab, witch still speaks" demo.
 - Validate timer and refresh recovery.
 - Test the wrong-accusation path.
 - Test the correct-accusation path.
@@ -1456,18 +1477,21 @@ Agent outputs must be validated against strict action schemas.
 
 ### Terse
 
-- Game state is actually persisted.
-- Timer is based on server time.
+- Game state is actually persisted in Terse actors (GameActor + MonsterActors).
+- Timer and witch reveals are driven by actor alarms, and fire with no client connected.
+- Public state reaches clients only through `@Emittable` fields.
+- Two devices in the same session see the same state live.
 - Refresh does not reset the game.
 - Conversations and reveal history remain available.
 - Public and private state are properly separated.
 
 ### Agent Relay
 
-- At least two independent agent sessions communicate through the real service.
-- A spy report is delivered to the witch-side integration.
+- Monsters and witch are registered Relay agents, each running as its own process with its own token.
+- Gossip and spy reports travel as real Relay DMs.
+- The witch accepts reports based on the Relay-authenticated sender.
 - One received report influences a revealed clue.
-- The relay message can be verified in Director View.
+- The relay message can be verified in Director View, linked to the clue it caused.
 
 ### Frontend
 
@@ -1518,7 +1542,7 @@ The long-term direction is not simply another Pokémon clone.
 
 **Sponsor Explanation**
 
-"Agent Relay enables real communication between the monster agents and the witch. Terse keeps our entire game world persistent — from character memories to the countdown and hidden identity."
+"Each monster is a Terse durable actor with its own memory, and a real agent on Agent Relay. They whisper to each other over Relay. The witch lives in an actor too, and her alarm keeps ticking even when nobody is in the room. Close the tab, come back, and she has already spoken."
 
 **Live Demo**
 
