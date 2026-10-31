@@ -151,7 +151,7 @@ function donut(value, label, segments, { locked = false } = {}) {
     if (length) chart.append(svg('circle', { cx: 70, cy: 70, r: radius, fill: 'none', stroke: segment.color, 'stroke-width': 13, 'stroke-dasharray': `${Math.max(0, length - 3)} ${circumference}`, 'stroke-dashoffset': -offset, transform: 'rotate(-90 70 70)' }))
     offset += length
   }
-  return el('div', { class: 'donut-wrap' }, chart, el('div', { class: 'donut-center' }, el('div', { class: 'donut-value' }, value ?? '—'), el('div', { class: 'donut-label' }, label)))
+  return el('div', { class: 'donut-wrap' }, chart, el('div', { class: 'donut-center' }, el('div', { class: 'donut-value' }, value ?? '-'), el('div', { class: 'donut-label' }, label)))
 }
 function breakdown(rows) { return el('div', { class: 'metric-breakdown' }, rows.map(row => el('div', { class: 'breakdown-item' }, el('span', {}, el('i', { style: `background:${row.color}`, 'aria-hidden': true }), row.label), el('strong', {}, row.value)))) }
 function sparkline(model) {
@@ -172,10 +172,10 @@ function metricGrid(model) {
   const time = metric(live ? 'Time remaining' : 'Session duration', clock,
     el('span', { 'data-clock-label': live ? '' : null }, live ? 'Until the library sees dawn' : `Accused: ${model.accusation ? nameOf(model.accusation.monsterId) : 'No accusation'}`),
     [sparkline(model), el('div', { class: 'metric-progress', 'aria-hidden': true }, el('span', { 'data-time-progress': live ? '' : null, style: 'width:100%' }))], 'time-card')
-  const relay = el('section', { class: 'metric-card' }, el('div', { class: 'metric-label' }, 'Agent Relay'), donut(model.relayTotal, live ? 'observed messages' : 'recorded messages', model.relayAvailable ? model.breakdown : []), breakdown(model.breakdown), !model.relayAvailable ? el('div', { class: 'metric-foot err' }, 'Live feed unavailable · retrying') : null)
+  const relay = el('section', { class: 'metric-card' }, el('div', { class: 'metric-label' }, 'Agent Relay'), donut(model.relayTotal, live ? 'live' : 'messages', model.relayAvailable ? model.breakdown : []), breakdown(model.breakdown), !model.relayAvailable ? el('div', { class: 'metric-foot err' }, 'Live feed unavailable · retrying') : null)
   const linked = live ? null : model.pub.clues.filter(clue => model.evidence.some(e => e.clueId === clue.id && e.relayMessageIds?.length)).length
   const segments = live ? [] : [{ label: 'Linked to Relay', value: linked, color: '#d8d8dc' }, { label: 'Other omens', value: pub.clues.length - linked, color: '#55555b' }]
-  const clues = el('section', { class: 'metric-card' }, el('div', { class: 'metric-label' }, 'Witch revelations'), donut(pub.clues.length, 'published clues', segments, { locked: live }), live ? el('div', { class: 'metric-breakdown' }, el('div', { class: 'breakdown-item' }, el('span', {}, 'Evidence links'), badge('Locked')), el('div', { class: 'metric-foot' }, 'Source reports unlock after the ending')) : breakdown(segments))
+  const clues = el('section', { class: 'metric-card' }, el('div', { class: 'metric-label' }, 'Witch revelations'), donut(pub.clues.length, 'clues', segments, { locked: live }), live ? el('div', { class: 'metric-breakdown' }, el('div', { class: 'breakdown-item' }, el('span', {}, 'Evidence links'), badge('Locked')), el('div', { class: 'metric-foot' }, 'Source reports unlock after the ending')) : breakdown(segments))
   return el('div', { class: 'metrics-grid' }, small, time, relay, clues)
 }
 

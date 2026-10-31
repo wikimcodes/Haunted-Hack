@@ -43,10 +43,22 @@ export const ECHO_LINES = [
     (fact: string) => `A tiny voice brought me your words: "${fact}"`
 ]
 
+// No report yet means the spy has heard nothing from the player, directly or by gossip.
+// The line says so, which is a real hint: the spy is a ghost the player hasn't reached.
 export const SILENT_LINES = [
-    (whispers: number) => `My spy has told me nothing yet... but ${whispers} secret whisper${whispers === 1 ? " has" : "s have"} passed between the monsters tonight.`,
-    (whispers: number) => `Quiet, so quiet. Still, I counted ${whispers} whisper${whispers === 1 ? "" : "s"} in the dark.`
+    (whispers: number) => `My spy has heard nothing from you yet. Have you spoken to everyone? ${whispers} whisper${whispers === 1 ? " has" : "s have"} passed in the dark.`,
+    (whispers: number) => `Silence from my little spy... you haven't told it a thing. Yet ${whispers} whisper${whispers === 1 ? "" : "s"} drifted between the shelves.`
 ]
+
+// The spy knows something but its report hasn't arrived yet: say nothing misleading.
+export const WAITING_LINES = [
+    (whispers: number) => `My spy is slow tonight. ${whispers} whisper${whispers === 1 ? " has" : "s have"} passed between the shelves.`
+]
+
+// How the reported secret reached the spy. Told directly: the spy is the ghost the player told.
+// Via gossip: the ghost the player told is innocent, and the spy is someone it whispered to.
+export const DIRECT_SUFFIX = " And it came straight from your own lips."
+export const GOSSIP_SUFFIX = " Though it reached my spy through a whisper."
 
 export const CLEAR_LINES = [
     (name: string) => `${name} is far too sweet to work for me. Don't waste your time.`,

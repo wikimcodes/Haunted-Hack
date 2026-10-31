@@ -3,6 +3,8 @@ import { Actor, Emittable, Persisted, type ActorContext, type ActorSocket } from
 import {
     CLEAR_LINES,
     DAWN_LINE,
+    DIRECT_SUFFIX,
+    GOSSIP_SUFFIX,
     DEFAULT_GAME_MS,
     DEFAULT_REVEAL_MS,
     ECHO_LINES,
@@ -14,6 +16,7 @@ import {
     MONSTERS,
     MONSTER_IDS,
     SILENT_LINES,
+    WAITING_LINES,
     WIN_LINE,
     clip,
     isMonsterId,
@@ -242,7 +245,9 @@ export class GameActor extends Actor<SocketMeta, Incoming, Cue> {
             const report = pending[pending.length - 1]!
             const fact = this.facts.find(f => report.factIds.includes(f.id))
             const text = fact ? fact.text : report.content
-            clue = { id: `clue_${round}`, round, kind: "echo", content: pickRandom(ECHO_LINES)(clip(text, 90)), revealedAt: now }
+            // Say how the secret travelled, so the echo is something the player can reason with.
+            const route = fact ? (fact.toldTo === report.sourceMonsterId ? DIRECT_SUFFIX : GOSSIP_SUFFIX) : ""
+            clue = { id: `clue_${round}`, round, kind: "echo", content: pickRandom(ECHO_LINES)(clip(text, 90)) + route, revealedAt: now }
             reportIds = [report.id]
             this.reports = this.reports.map(r => (r.id === report.id ? { ...r, revealed: true } : r))
         } else if (round >= 2 && !this.clearedMonster) {
@@ -251,7 +256,10 @@ export class GameActor extends Actor<SocketMeta, Incoming, Cue> {
             clue = { id: `clue_${round}`, round, kind: "clear", content: pickRandom(CLEAR_LINES)(MONSTERS[innocent].name), revealedAt: now }
         } else {
             const whispers = this.gossip.filter(g => g.status !== "reserved").length
-            clue = { id: `clue_${round}`, round, kind: "silent", content: pickRandom(SILENT_LINES)(whispers), revealedAt: now }
+            // Only claim the spy has heard nothing when that is true (a report may still be in flight).
+            const spyKnows = (this.knowledge[this.spyId!] ?? []).length > 0
+            const line = spyKnows ? pickRandom(WAITING_LINES) : pickRandom(SILENT_LINES)
+            clue = { id: `clue_${round}`, round, kind: "silent", content: line(whispers), revealedAt: now }
         }
 
         // If an echo was shown on a later round and nobody has been cleared yet, clear one too
