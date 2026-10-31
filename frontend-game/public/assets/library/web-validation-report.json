@@ -203,6 +203,35 @@
         "EXT_texture_webp",
         "KHR_mesh_quantization"
       ]
+    },
+    "witch": {
+      "originalBytes": 625048,
+      "webBytes": 203176,
+      "geometryAndAnimationChecks": {
+        "triangles": 15924,
+        "clips": {
+          "Idle": {
+            "duration": 8,
+            "paths": [
+              "rotation",
+              "translation",
+              "weights"
+            ]
+          }
+        },
+        "morphPrimitives": 1,
+        "normalMappedMaterials": 1,
+        "meshes": 6,
+        "primitives": 7,
+        "nodes": 8,
+        "materials": 4
+      },
+      "extensionsRequired": [
+        "EXT_meshopt_compression",
+        "EXT_texture_webp",
+        "KHR_mesh_quantization"
+      ],
+      "clothSheenMaxFactor": 0.03200000151991844
     }
   }
 }

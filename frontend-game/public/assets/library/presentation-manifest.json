@@ -1,0 +1,53 @@
+{
+  "coordinateSystem": "glTF Y-up meters",
+  "cameraPresets": {
+    "wide": {
+      "position": [
+        -0.7,
+        1.65,
+        4.35
+      ],
+      "target": [
+        -0.3,
+        1.9,
+        -4.6
+      ],
+      "fov": 58
+    },
+    "witch": {
+      "position": [
+        -0.25,
+        1.65,
+        -1.6
+      ],
+      "target": [
+        0,
+        1.65,
+        -6.65
+      ],
+      "fov": 42
+    }
+  },
+  "monsterFocus": {
+    "method": "Use world-space monster center and a camera position on the player-facing side; restore the stored walking pose afterwards."
+  },
+  "lights": {
+    "witch": [
+      -0.8,
+      2.7,
+      -6.95
+    ],
+    "window": [
+      0.7,
+      4.4,
+      -7.3
+    ],
+    "exit": [
+      3.55,
+      1.9,
+      -3.65
+    ]
+  },
+  "revealDurationSeconds": 6,
+  "trigger": "Only a public WITCH_REVEAL event or explicitly labelled exploration preview; no spy identity is used."
+}

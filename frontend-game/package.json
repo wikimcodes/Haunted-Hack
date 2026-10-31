@@ -9,7 +9,7 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit -p . && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "test": "node --import tsx --test src/connection.test.ts src/world/collision.test.ts"
+    "test": "node --import tsx --test src/connection.test.ts src/world/collision.test.ts src/world/cinematics.test.ts"
   },
   "peerDependencies": {
     "react": ">=18"

@@ -1,0 +1,58 @@
+{
+  "blenderVersion": "5.2.1 LTS",
+  "sourceScene": "Cinematic_Library",
+  "method": "Standalone normalized-root GLB export, header/resources/geometry/morph/animation inspection, isolated Blender reimport and actual Idle morph sampling.",
+  "asset": {
+    "file": "witch.glb",
+    "bytes": 625048,
+    "triangles": 15924,
+    "meshes": 6,
+    "primitives": 7,
+    "nodes": 8,
+    "materials": 4,
+    "normalMappedMaterials": 1,
+    "animations": [
+      {
+        "name": "Idle",
+        "durationSeconds": 8.0,
+        "channels": 3,
+        "weightChannels": 1,
+        "weights": [
+          {
+            "target": "Witch_Cloak",
+            "range": 0.7199999913573265
+          }
+        ]
+      }
+    ],
+    "morphPrimitives": 1,
+    "maximumMorphDeltaMeters": 0.03273,
+    "placement": {
+      "position": [
+        0.0,
+        0.1,
+        -6.65
+      ],
+      "quaternion": [
+        0.0,
+        0.0,
+        -0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "rotationY": 0.0
+    }
+  },
+  "roundTrip": {
+    "loaded": true,
+    "meshObjects": 6,
+    "IdleDeforms": true,
+    "shapeKeyDeltas": {
+      "Witch_Cloak_Mesh.001": 0.616907
+    }
+  }
+}

@@ -6,7 +6,7 @@
   "coordinateSystem": "Three.js/glTF Y-up; Blender (x,y,z) becomes (x,z,-y).",
   "units": "meters",
   "placementNote": "All individual characters and the escape door have identity asset roots. Apply listed position, quaternion and scale to recreate the library arrangement. Environment geometry retains world positions and excludes the animated door leaf and lock; its masonry frame remains included.",
-  "animationNote": "Use AnimationMixer on each GLTF scene. Monster clip names: Idle, Talk, Think, Accused; all include deforming cloth and streamer shape keys. Idle and Talk loop; Think and Accused are one-shot reactions. Door clip: Open, played once with clampWhenFinished=true after a correct accusation.",
+  "animationNote": "Use AnimationMixer on each GLTF scene. Monster clip names: Idle, Talk, Think, Accused; all include deforming cloth and streamer shape keys. Idle and Talk loop; Think and Accused are one-shot reactions. Door clip: Open, played once with clampWhenFinished=true after a correct accusation. Witch: 8-second Idle with actual cloak morph; runtime controls presence and reveal lights.",
   "doorNote": "Play Open once with clampWhenFinished=true. The door is exported separately from the static environment; any lock controls remain a runtime concern.",
   "renderNote": "Blender cinematic lights, volumetric atmosphere, compositor glow and camera objects are not included in GLBs; recreate these in the target runtime using the manifest camera parameters. Candle geometry exports, point lights do not. Hidden CINEMATIC_EXTERIOR objects are excluded. The visible forest and world lighting use Mossy Forest HDRI, supplied separately at textures/environment/mossy_forest_2k.hdr; load it separately because world HDRIs are not embedded in environment.glb.",
   "spiritMaterialNote": "SpiritVeil vertex COLOR_0 carries both tint and opacity; keep vertex colors and alpha blending when replacing glTF materials. PBR normal maps remain embedded where used.",
@@ -280,10 +280,57 @@
           0.03
         ]
       }
+    },
+    "witch": {
+      "file": "witch.glb",
+      "bytes": 203176,
+      "triangles": 15924,
+      "meshes": 6,
+      "primitives": 7,
+      "nodes": 8,
+      "materials": 4,
+      "normalMappedMaterials": 1,
+      "animations": [
+        {
+          "name": "Idle",
+          "durationSeconds": 8.0,
+          "channels": 3,
+          "weightChannels": 1,
+          "weights": [
+            {
+              "target": "Witch_Cloak",
+              "range": 0.7199999913573265
+            }
+          ]
+        }
+      ],
+      "morphPrimitives": 1,
+      "maximumMorphDeltaMeters": 0.03273,
+      "placement": {
+        "position": [
+          0.0,
+          0.1,
+          -6.65
+        ],
+        "quaternion": [
+          0.0,
+          0.0,
+          -0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rotationY": 0.0
+      },
+      "validation": "Source Blender reimport/Idle deformation and compressed geometry/animation/normal-map checks; browser uses MeshoptDecoder."
     }
   },
-  "totalBytes": 12609708,
-  "totalTriangles": 404421,
+  "totalBytes": 12812884,
+  "totalTriangles": 420345,
   "webCompression": "WebP quality90 + Meshopt medium; 16-bit positions,12-bit normals,14-bit UV where applicable; tiled UVs retained at full precision. No simplification.",
-  "originalExportsCommit": "dd9ccf6"
+  "originalExportsCommit": "dd9ccf6",
+  "presentationManifest": "presentation-manifest.json"
 }

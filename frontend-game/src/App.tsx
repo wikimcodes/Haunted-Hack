@@ -63,6 +63,10 @@ export default function App() {
   const [dismissedResult, setDismissedResult] = useState(false)
   const [evidence, setEvidence] = useState<unknown>(null)
   const [showEvidence, setShowEvidence] = useState(false)
+  const [revealToken, setRevealToken] = useState(0)
+  const [cinematicActive, setCinematicActive] = useState(false)
+  const [revealShowing, setRevealShowing] = useState(false)
+  const [revealPreview, setRevealPreview] = useState(false)
   const historyEnd = useRef<HTMLDivElement>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const previousCue = useRef('')
@@ -73,10 +77,15 @@ export default function App() {
   if (gameMode) for (const monster of game.state?.monsters ?? []) moods[monster.id] = monster.mood
 
   game.useCue(cue => {
-    if (cue.cue !== 'WITCH_REVEAL') return
+    if (cue.cue !== 'WITCH_REVEAL' || !gameMode) return
     const id = `${cue.cue}:${cue.at}`
     if (previousCue.current === id) return
     previousCue.current = id
+    setPaused(false)
+    setJournal(false)
+    setRevealPreview(false)
+    setRevealShowing(true)
+    setRevealToken(token => token + 1)
     setToast('The witch has spoken. A new omen awaits.')
     if (toastTimer.current) clearTimeout(toastTimer.current)
     toastTimer.current = setTimeout(() => setToast(null), 6500)
@@ -116,7 +125,12 @@ export default function App() {
     finally { setBusy(false) }
   }
   function backToLobby() { world.current?.unlock(); setMode('lobby'); setPaused(false); setSelected(null); setJournal(false); setConfirm(false); setError(null) }
-  const sceneProps = { active: mode !== 'lobby' && !paused, interactive: !overlay, moods, doorOpen: gameMode && game.state?.phase === 'won', onProgress: setProgress, onReady: () => { setReady(true); setProgress(100) }, onError: setSceneError, onLockChange: setLocked, onTargetChange: setTarget, onInteract: meet }
+  function previewWitch() {
+    setPaused(false); setSelected(null); setJournal(false); setRevealPreview(true); setRevealShowing(true)
+    setRevealToken(token => token + 1)
+  }
+  const presentation = !gameMode || !game.state ? 'introduction' : game.state.phase === 'won' ? 'won' : game.state.phase !== 'playing' ? 'lost' : game.state.clues.length ? 'suspicion' : 'introduction'
+  const sceneProps = { active: mode !== 'lobby' && !paused, interactive: !overlay, moods, doorOpen: gameMode && game.state?.phase === 'won', presentation, focusMonster: selected, revealToken, onCinematicChange: (active: boolean) => { setCinematicActive(active); if (!active) setRevealShowing(false) }, onProgress: setProgress, onReady: () => { setReady(true); setProgress(100) }, onError: setSceneError, onLockChange: setLocked, onTargetChange: setTarget, onInteract: meet } as const
 
   return <main className={`app mode-${mode}`}>
     <World key={loadingKey} ref={world} {...sceneProps} />
@@ -146,15 +160,16 @@ export default function App() {
         {gameMode ? <div className={`clock ${game.secondsLeft !== null && game.secondsLeft < 30 ? 'urgent' : ''}`} aria-label={`${game.secondsLeft} seconds until dawn`}><span>UNTIL DAWN</span><strong>{time(game.secondsLeft)}</strong><small>{game.state?.phase === 'playing' ? `ROUND ${game.state.round} · ${game.connected ? 'CONNECTED' : 'RECONNECTING'}` : game.state?.phase.toUpperCase()}</small></div> : <div className="exploration-label"><span className="status-dot" /> FREE EXPLORATION</div>}
         <div className="hud-top-actions">{gameMode && <button className="hud-button" onClick={() => setJournal(true)}>Omens <span>{game.state?.clues.length ?? 0}</span></button>}<button className="icon-button menu-button" onClick={() => setPaused(true)} aria-label="Open pause menu"><span /><span /></button></div>
       </header>
-      {!overlay && <>
+      {!overlay && !cinematicActive && <>
         <div className={`reticle ${target ? 'has-target' : ''}`} aria-hidden="true"><span /><span /></div>
         {target && <button className="target-label" onClick={() => meet(target)}><span>{spirits[target].name}</span><small><kbd>E</kbd> Speak to the spirit</small></button>}
         <div className="objective"><p className="eyebrow">{gameMode ? 'FIND THE TRAITOR' : 'A MOMENT IN THE ARCHIVE'}</p><p>{gameMode ? 'Listen carefully. You have one accusation.' : 'Walk between the shelves. Meet the spirits.'}</p></div>
         <div className="controls-strip"><span><kbd>W A S D</kbd> Move</span><span><kbd>{locked ? 'MOUSE' : 'DRAG'}</kbd> Look</span><span><kbd>E</kbd> Speak</span><span><kbd>ESC</kbd> Cursor</span></div>
         {!locked && <button className="look-button" onClick={() => world.current?.lock()}>Click to look around <Arrow /></button>}
       </>}
-      {toast && <button className="omen-toast" role="status" onClick={() => { setJournal(true); setToast(null) }}><small>THE WITCH’S OMEN</small>{toast}<Arrow /></button>}
-      {selected && !confirm && !resultVisible && <aside className="dialogue-panel" aria-label={`Conversation with ${spirits[selected].name}`}>
+      {revealShowing && <div className="witch-caption" role="status"><span>{revealPreview ? 'SCENE PREVIEW' : 'THE WITCH’S REVEAL'}</span><p>{revealPreview ? 'Something stirs beyond the shelves.' : game.state?.clues.at(-1)?.content || 'The witch has an omen for you.'}</p>{revealPreview && <small>A visual preview. Your investigation is unchanged.</small>}</div>}
+      {toast && !revealShowing && <button className="omen-toast" role="status" onClick={() => { setJournal(true); setToast(null) }}><small>THE WITCH’S OMEN</small>{toast}<Arrow /></button>}
+      {selected && !confirm && !resultVisible && !revealShowing && <aside className="dialogue-panel" aria-label={`Conversation with ${spirits[selected].name}`}>
         <div className="dialogue-heading"><div><p className="eyebrow">{spirits[selected].title}</p><h2>{spirits[selected].name}</h2></div><button className="icon-button" onClick={() => setSelected(null)} aria-label="Close conversation">×</button></div>
         <div className="dialogue-history" aria-live="polite">
           <p className="spirit-intro">{spirits[selected].description}</p>
@@ -166,7 +181,7 @@ export default function App() {
       </aside>}
     </>}
 
-    {paused && <Modal label="TAKE A BREATH" title="The library waits." close={() => setPaused(false)}><p>{gameMode && !game.isOver ? 'The investigation clock keeps running while you are here.' : 'The shelves have kept their secrets for centuries. You have time.'}</p><div className="menu-actions"><button className="button primary" onClick={() => { flushSync(() => setPaused(false)); world.current?.lock() }}>Return to the library <Arrow /></button><button className="button secondary" onClick={() => { world.current?.reset(); setPaused(false) }}>Return to entrance <span>↺</span></button><button className="text-button" onClick={backToLobby}>Back to title</button></div><div className="menu-controls"><p><kbd>W A S D</kbd> Walk &nbsp; <kbd>SHIFT</kbd> Walk faster</p><p><kbd>MOUSE / DRAG</kbd> Look &nbsp; <kbd>E</kbd> Speak</p><p>On touchscreens, use the movement pad and drag to look.</p></div></Modal>}
+    {paused && <Modal label="TAKE A BREATH" title="The library waits." close={() => setPaused(false)}><p>{gameMode && !game.isOver ? 'The investigation clock keeps running while you are here.' : 'The shelves have kept their secrets for centuries. You have time.'}</p><div className="menu-actions"><button className="button primary" onClick={() => { flushSync(() => setPaused(false)); world.current?.lock() }}>Return to the library <Arrow /></button><button className="button secondary" onClick={() => { world.current?.reset(); setPaused(false) }}>Return to entrance <span>↺</span></button>{mode === 'explore' && <button className="button secondary" onClick={previewWitch}>Preview the witch’s reveal <span>✧</span></button>}<button className="text-button" onClick={backToLobby}>Back to title</button></div><div className="menu-controls"><p><kbd>W A S D</kbd> Walk &nbsp; <kbd>SHIFT</kbd> Walk faster</p><p><kbd>MOUSE / DRAG</kbd> Look &nbsp; <kbd>E</kbd> Speak</p><p>On touchscreens, use the movement pad and drag to look.</p></div></Modal>}
     {journal && <Modal label="THE WITCH’S OMENS" title="What the walls heard." close={() => setJournal(false)}><div className="journal-list">{game.state?.clues.length ? game.state.clues.map(clue => <article key={clue.id}><p className="eyebrow">ROUND {clue.round}</p><p>“{clue.content}”</p></article>) : <p>No omen has been revealed yet. Keep talking to the spirits.</p>}</div>{game.secondsToReveal !== null && !game.isOver && <p className="journal-next">Next whisper in {time(game.secondsToReveal)}</p>}</Modal>}
     {confirm && selected && <Modal label="ONE CHANCE TO LEAVE" title={`Accuse ${spirits[selected].name}?`} close={busy ? undefined : () => setConfirm(false)}><p>You have one accusation. Choose correctly and the door opens. Choose wrongly and the witch keeps you.</p>{error && <p className="inline-error" role="alert">{error}</p>}<div className="menu-actions"><button className="button danger" onClick={accuse} disabled={busy}>{busy ? 'Waiting for the verdict…' : `Accuse ${spirits[selected].name}`}<Arrow /></button><button className="text-button" onClick={() => setConfirm(false)} disabled={busy}>I need more time</button></div></Modal>}
     {resultVisible && <Modal label={game.state?.phase === 'won' ? 'THE LOCK HAS TURNED' : 'THE LAST CANDLE FADES'} title={game.state?.phase === 'won' ? 'You found a way out.' : game.state?.phase === 'expired' ? 'Dawn came too soon.' : 'A secret kept you here.'}><p>{game.state?.spyId ? `${spirits[game.state.spyId].name} was the witch’s spy.` : 'The investigation has ended.'} {game.state?.phase === 'won' ? 'The escape door is now open.' : 'Every conversation left a trace. Look back through the evidence.'}</p>{error && <p className="inline-error" role="alert">{error}</p>}<div className="menu-actions"><button className="button primary" onClick={openEvidence} disabled={busy}>{busy ? 'Opening the record…' : 'Behind the betrayal'}<Arrow /></button><button className="button secondary" onClick={() => setDismissedResult(true)}>Return to the room <Arrow /></button><button className="text-button" onClick={backToLobby}>Back to title</button></div></Modal>}

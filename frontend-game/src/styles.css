@@ -84,6 +84,10 @@ kbd { border: 1px solid #d1d7c94a; border-radius: 2px; padding: 3px 5px; font: i
 .omen-toast { position: absolute; top: 120px; left: 50%; transform: translateX(-50%); z-index: 7; padding: 18px 24px; border: 1px solid #a99a6955; background: #111f1df0; font-size: 12px; box-shadow: 0 15px 60px #0008; max-width: calc(100% - 40px); width: 410px; text-align: left; }
 .omen-toast small { display: block; color: var(--gold); font-size: 8px; letter-spacing: .17em; margin-bottom: 9px; }
 .omen-toast > span { float: right; }
+.witch-caption { position: absolute; z-index: 6; bottom: 8vh; left: 50%; transform: translateX(-50%); width: min(560px, calc(100% - 40px)); text-align: center; pointer-events: none; padding: 20px 25px; background: radial-gradient(ellipse, #091319b8, transparent 75%); text-shadow: 0 2px 12px #000; }
+.witch-caption > span { font-size: 8px; letter-spacing: .28em; color: #c0b2cb; }
+.witch-caption p { margin: 12px 0 8px; font-family: 'Cormorant Garamond', Georgia, serif; font-size: clamp(22px, 3.4vw, 33px); line-height: 1.25; color: #e0d9e5; }
+.witch-caption small { font-size: 9px; color: #b7b8b5; }
 .dialogue-panel { position: absolute; z-index: 6; right: 32px; bottom: 70px; top: max(110px, 17vh); width: 390px; display: flex; flex-direction: column; background: #101d19f2; border: 1px solid #c9c7a736; border-radius: 3px; box-shadow: 0 24px 75px #02080780; backdrop-filter: blur(18px); }
 .dialogue-heading { padding: 22px 24px 19px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
 .dialogue-heading .eyebrow { margin: 0 0 3px; font-size: 8px; }
