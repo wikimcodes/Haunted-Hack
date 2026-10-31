@@ -48,15 +48,17 @@ export function createGameApi(
     return {
         start: (options: { gameSeconds?: number; revealSeconds?: number } = {}) => request<PublicGameState>("POST", "/api/game/start", options),
         get: (sessionId: string) => request<PublicGameState>("GET", gamePath(sessionId)),
-        chat: (sessionId: string, monsterId: MonsterId, message: string, requestId = crypto.randomUUID()) =>
-            request<ChatResult>("POST", `${gamePath(sessionId)}/chat`, { monsterId, message, requestId }, options.chatTimeoutMs ?? 45_000),
+        chat: (sessionId: string, monsterId: MonsterId, message: string, requestId = crypto.randomUUID(), voice = false) =>
+            request<ChatResult>("POST", `${gamePath(sessionId)}/chat`, { monsterId, message, requestId, voice }, options.chatTimeoutMs ?? 45_000),
         accuse: (sessionId: string, monsterId: MonsterId) =>
             request<{ outcome: PublicGameState["phase"]; state: PublicGameState }>("POST", `${gamePath(sessionId)}/accuse`, { monsterId }),
         socket: (sessionId: string, role: "player" | "director" = "player") =>
             request<{ websocketUrl: string }>("POST", `${gamePath(sessionId)}/socket`, { role }),
         director: (sessionId: string) => request<unknown>("GET", `${gamePath(sessionId)}/director`),
-        /** MP3 of the witch speaking a revealed clue (OpenAI text-to-speech). */
-        voiceUrl: (sessionId: string, clueId: string) => `${base}${gamePath(sessionId)}/voice/${encodeURIComponent(clueId)}`
+        /** MP3 of the witch speaking a revealed clue. */
+        voiceUrl: (sessionId: string, clueId: string) => `${base}${gamePath(sessionId)}/voice/${encodeURIComponent(clueId)}`,
+        /** MP3 of a ghost speaking its reply to the chat sent with this requestId (only if it asked for a voice). */
+        replyVoiceUrl: (sessionId: string, requestId: string) => `${base}${gamePath(sessionId)}/reply-voice/${encodeURIComponent(requestId)}`
     }
 }
 

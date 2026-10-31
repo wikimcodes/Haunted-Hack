@@ -14,13 +14,13 @@ export interface UseSpyMonsterOptions {
     apiUrl: string
     /** Rejoin the last game (or ?game=<id>) on load. Default true. */
     autoResume?: boolean
-    /** Speak each new witch clue aloud (OpenAI text-to-speech). Default true. */
-    witchVoice?: boolean
+    /** Speak new witch clues and the ghosts' replies aloud. Default true. */
+    voices?: boolean
 }
 
-export function useSpyMonster({ apiUrl, autoResume = true, witchVoice = true }: UseSpyMonsterOptions) {
-    const connection = useMemo(() => new GameConnection(apiUrl, { witchVoice }), [apiUrl])
-    useEffect(() => connection.setWitchVoice(witchVoice), [connection, witchVoice])
+export function useSpyMonster({ apiUrl, autoResume = true, voices = true }: UseSpyMonsterOptions) {
+    const connection = useMemo(() => new GameConnection(apiUrl, { voices }), [apiUrl])
+    useEffect(() => connection.setVoices(voices), [connection, voices])
     const snapshot = useSyncExternalStore(connection.subscribe, connection.getSnapshot, connection.getSnapshot)
     const now = useNow(snapshot.state?.phase === "playing")
 

@@ -63,6 +63,8 @@ export interface ChatResult {
     reply: string
     factId: string
     source: "openai" | "fallback"
+    /** The server is speaking this reply in the ghost's own voice; fetch it from `replyVoiceUrl`. */
+    voice?: boolean
 }
 
 /** Mood -> Blender animation clip name (PRD 6.2). Holly can change these to match her clips. */

@@ -57,7 +57,9 @@ function Modal({ title, label, children, close }: { title: string; label: string
 export default function App() {
   const world = useRef<WorldHandle>(null)
   const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001'
-  const game = useSpyMonster({ apiUrl, autoResume: true })
+  const [soundMuted, setSoundMuted] = useState(savedMutePreference)
+  // Mute silences the library sounds and every spoken line (witch clues and ghost replies).
+  const game = useSpyMonster({ apiUrl, autoResume: true, voices: !soundMuted })
   const [mode, setMode] = useState<'lobby' | 'explore' | 'game'>('lobby')
   const [ready, setReady] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -74,7 +76,6 @@ export default function App() {
   const [message, setMessage] = useState('')
   const [toast, setToast] = useState<string | null>(null)
   const [dismissedResult, setDismissedResult] = useState(false)
-  const [soundMuted, setSoundMuted] = useState(savedMutePreference)
   const [audioStatus, setAudioStatus] = useState<AudioStatus>('locked')
   const [revealToken, setRevealToken] = useState(0)
   const [cinematicActive, setCinematicActive] = useState(false)

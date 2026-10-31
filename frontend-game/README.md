@@ -106,7 +106,7 @@ The existing `src/index.ts` exports remain usable independently of the rendered 
 | `useCue(handler)` | Subscribe to backend animation cues; call unconditionally in the component |
 | `shareUrl()` | Link to rejoin the same session |
 | `director()` | Post-game evidence; the server rejects access during play |
-| `witchVoiceUrl(clueId)` | MP3 of the witch speaking a revealed clue. New clues are spoken automatically; pass `witchVoice: false` to `useSpyMonster` to mute |
+| `witchVoiceUrl(clueId)` | MP3 of the witch speaking a revealed clue. New clues and each ghost's replies are spoken automatically; pass `voices: false` to `useSpyMonster` to silence them (the app does this when sound is muted) |
 
 `messages` is separate from the `chat()` sending function. Animation moods use `Idle`, `Talk`, `Think` and `Accused`; `nervous` falls back to `Think`, because these exports contain no `Nervous` clip.
 

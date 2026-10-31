@@ -35,15 +35,16 @@ export class GameConnection {
     #socketGeneration = 0
     #retryTimer: ReturnType<typeof setTimeout> | null = null
 
-    #witchVoice: boolean
+    #voices: boolean
     #spokenClues: Set<string> | null = null
     // One reusable player, unlocked during a tap. Phones (iOS especially) block audio that a tap
-    // didn't start, so clue audio arriving later from the server plays through this element.
+    // didn't start, so voices arriving later from the server play through this element.
     #player: HTMLAudioElement | null = null
-    #voiceQueue: string[] = []
+    #voiceQueue: { url: string; ghost: boolean }[] = []
+    #playingGhost = false
 
-    constructor(apiUrl: string, options: { witchVoice?: boolean } = {}) {
-        this.#witchVoice = options.witchVoice ?? true
+    constructor(apiUrl: string, options: { voices?: boolean } = {}) {
+        this.#voices = options.voices ?? true
         this.api = createGameApi(apiUrl, {
             onServerTime: offset => {
                 if (Math.abs(offset - this.#snapshot.clockOffsetMs) > 250) this.#set({ clockOffsetMs: Math.round(offset) })
@@ -122,10 +123,12 @@ export class GameConnection {
         this.#pushChat({ id: crypto.randomUUID(), monsterId, role: "player", text: message, at: Date.now() })
         this.#setWaiting([...this.#snapshot.waiting, monsterId], { error: null })
         try {
-            const result = await this.api.chat(sessionId, monsterId, message)
+            const requestId = crypto.randomUUID()
+            const result = await this.api.chat(sessionId, monsterId, message, requestId, this.#voices)
             if (!this.#isCurrent(generation, sessionId)) return false
             this.#pushChat({ id: crypto.randomUUID(), monsterId, role: "monster", text: result.reply, at: Date.now() })
             this.#setWaiting(this.#snapshot.waiting.filter(m => m !== monsterId))
+            if (result.voice) this.#speakReply(sessionId, requestId)
             return true
         } catch (err) {
             if (!this.#isCurrent(generation, sessionId)) return false
@@ -166,6 +169,7 @@ export class GameConnection {
     close(): void {
         this.#closed = true
         this.#generation++
+        this.#stopVoices()
         this.#cancelSocket()
         this.#setWaiting([], { connected: false })
     }
@@ -243,9 +247,15 @@ export class GameConnection {
         this.#speakNewClues(state)
     }
 
-    /** Turns the witch's spoken clues on or off (on by default). */
-    setWitchVoice(on: boolean): void {
-        this.#witchVoice = on
+    /** Turns spoken lines on or off: the witch's clues and the ghosts' replies (on by default). */
+    setVoices(on: boolean): void {
+        this.#voices = on
+        if (!on) this.#stopVoices()
+    }
+
+    // The text is already on screen; the ghost's voice follows once its MP3 arrives.
+    #speakReply(sessionId: string, requestId: string): void {
+        if (this.#voices) this.#enqueueVoice(this.api.replyVoiceUrl(sessionId, requestId), true)
     }
 
     // Speaks clues revealed while this client is watching. Clues that already existed when the
@@ -258,7 +268,7 @@ export class GameConnection {
         for (const clue of state.clues) {
             if (this.#spokenClues.has(clue.id)) continue
             this.#spokenClues.add(clue.id)
-            if (this.#witchVoice) this.#enqueueVoice(this.api.voiceUrl(state.sessionId, clue.id))
+            if (this.#voices) this.#enqueueVoice(this.api.voiceUrl(state.sessionId, clue.id), false)
         }
     }
 
@@ -279,25 +289,35 @@ export class GameConnection {
         void this.#player.play().catch(() => {})
     }
 
-    #enqueueVoice(url: string): void {
+    // Lines queue so they never overlap. A newer ghost reply replaces older ghost lines, queued or
+    // playing, so the player hears the latest answer; the witch's clues are never cut off.
+    #enqueueVoice(url: string, ghost: boolean): void {
         if (typeof Audio === "undefined") return
-        this.#voiceQueue.push(url)
+        if (ghost) this.#voiceQueue = this.#voiceQueue.filter(line => !line.ghost)
+        this.#voiceQueue.push({ url, ghost })
         const player = this.#player
         // Nothing playing (or only the silent unlock clip): start now. Otherwise "ended" picks it up.
-        if (!player || player.paused || player.src === SILENT_WAV) this.#playNextVoice()
+        if (!player || player.paused || player.src === SILENT_WAV || (ghost && this.#playingGhost)) this.#playNextVoice()
     }
 
     #playNextVoice(): void {
-        const url = this.#voiceQueue.shift()
-        if (!url) return
+        const line = this.#voiceQueue.shift()
+        this.#playingGhost = line?.ghost ?? false
+        if (!line) return
         if (!this.#player) {
             // Never unlocked by a tap: try anyway (works on desktop browsers after any click).
-            void new Audio(url).play().catch(() => {})
+            void new Audio(line.url).play().catch(() => {})
             this.#playNextVoice()
             return
         }
-        this.#player.src = url
+        this.#player.src = line.url
         void this.#player.play().catch(() => this.#playNextVoice())
+    }
+
+    #stopVoices(): void {
+        this.#voiceQueue = []
+        this.#playingGhost = false
+        if (this.#player && this.#player.src !== SILENT_WAV) this.#player.pause()
     }
 
     #receive(raw: string): void {

@@ -92,6 +92,8 @@ Open the `websocketUrl` from `/socket` right away (it expires). You receive:
 
 Each revealed clue can be spoken with OpenAI text-to-speech (`gpt-4o-mini-tts`, voice set by `WITCH_VOICE`, default `fable`): `GET /api/game/:id/voice/:clueId` returns an MP3. Only clues already in the public state can be voiced, so it never leaks anything early; each clue is generated once and cached. The Director screen has a **Sound** button (browsers need one click before playing audio) and then reads every new clue aloud; the frontend hook does the same automatically.
 
+The ghosts speak too. Each has its own voice: by default Sprout is Jessica, Pebble is Charlie and Momo is Callum, from the premade ElevenLabs voices. Without an ElevenLabs key they use the OpenAI voices `coral`, `verse` and `onyx`. A chat that sends `voice: true` returns `voice: true` once the server starts speaking the reply, and `GET /api/game/:id/reply-voice/:requestId` returns the MP3. Only replies the server generated can be spoken. ElevenLabs calls queue (`ELEVENLABS_CONCURRENCY`, default 2), so the plan's concurrency limit is not exceeded, and a 429 is retried before falling back to OpenAI.
+
 ## Leaderboard (Supabase, optional)
 
 Live games stay in Terse actors (one per game). When a game ends, the server writes one summary row to Supabase Postgres, so all-games questions never wake every actor. Accusations archive immediately; dawn endings are picked up by a 10-second sweep. The Director screen shows an "All games" panel (games played, escape rate, fastest catch, most deceptive monster); `GET /api/leaderboard` returns the same data.

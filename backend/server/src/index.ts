@@ -8,7 +8,7 @@ import QRCode from "qrcode"
 
 import { actors } from "../generated/index.js"
 import { archiveGame, leaderboard, startArchiver } from "./archive"
-import { monsterReply, witchSpeech } from "./llm"
+import { monsterReply, speech, voiceProvider, type Speaker } from "./llm"
 import { connectAgent, loadRelayConfig, withRelayRetry } from "./relayConfig"
 import { MONSTER_IDS, MONSTER_NAMES, isMonsterId, type MonsterId, type RelayMeta } from "./types"
 
@@ -79,14 +79,14 @@ async function startGame(req: Request) {
 }
 
 async function chat(req: Request, sessionId: string) {
-    const input = await body<{ monsterId?: string; message?: string; requestId?: string }>(req)
+    const input = await body<{ monsterId?: string; message?: string; requestId?: string; voice?: boolean }>(req)
     if (!isMonsterId(input.monsterId)) throw new HttpError(400, "unknown_monster")
     const text = (input.message ?? "").trim()
     if (!text || text.length > MAX_MESSAGE_CHARS) throw new HttpError(400, "message_length")
     const requestId = input.requestId ?? crypto.randomUUID()
     const key = `${sessionId}:${requestId}`
     if (!chatResults.has(key)) {
-        const run = runChat(sessionId, input.monsterId, text, requestId)
+        const run = runChat(sessionId, input.monsterId, text, requestId, input.voice === true)
         chatResults.set(key, run)
         // Keep a finished reply long enough to answer retries, then forget it.
         run.then(
@@ -97,7 +97,7 @@ async function chat(req: Request, sessionId: string) {
     return json(await chatResults.get(key))
 }
 
-async function runChat(sessionId: string, monsterId: MonsterId, text: string, requestId: string) {
+async function runChat(sessionId: string, monsterId: MonsterId, text: string, requestId: string, wantsVoice: boolean) {
     const g = game(sessionId)
     const state = await requireGame(sessionId)
     if (state.phase !== "playing" || Date.now() >= state.deadlineAt) throw new HttpError(409, "game_over")
@@ -127,7 +127,11 @@ async function runChat(sessionId: string, monsterId: MonsterId, text: string, re
         .then(sent => g.recordHandoff(sent.id))
         .catch(err => console.error("[chat] relay handoff failed:", String(err)))
 
-    return { monsterId, reply: answer.reply, factId: fact.id, source: answer.source }
+    // Start speaking now, so the MP3 is usually ready by the time the client asks for it.
+    const voice = wantsVoice && voiceProvider(monsterId) !== "none"
+    if (voice) cachedSpeech(`${sessionId}:reply:${requestId}`, monsterId, answer.reply)
+
+    return { monsterId, reply: answer.reply, factId: fact.id, source: answer.source, voice }
 }
 
 async function accuse(req: Request, sessionId: string) {
@@ -175,26 +179,40 @@ async function director(sessionId: string) {
     return json({ ...view, relay: { workspace: relayConfig.workspaceName, messages: relayMessages } })
 }
 
-// The witch speaks each revealed clue aloud. Only clues already in the public state can be voiced,
-// so this never leaks anything. Each clue is generated once and cached.
+// Spoken lines: the witch reads each revealed clue, and each ghost speaks its own replies.
+// Only text the server already made public can be voiced, so this never leaks anything,
+// and nobody can use the endpoint to speak arbitrary text. Each line is generated once and cached.
 const voiceCache = new Map<string, Promise<ArrayBuffer | null>>()
+
+function cachedSpeech(key: string, speaker: Speaker, text: string): Promise<ArrayBuffer | null> {
+    if (!voiceCache.has(key)) {
+        const audio = speech(speaker, text)
+        voiceCache.set(key, audio)
+        audio.then(a => !a && voiceCache.delete(key))
+        if (voiceCache.size > 500) voiceCache.delete(voiceCache.keys().next().value!)
+    }
+    return voiceCache.get(key)!
+}
+
+function audioResponse(audio: ArrayBuffer | null | undefined) {
+    if (!audio) throw new HttpError(503, "voice_unavailable")
+    return new Response(audio, {
+        headers: { "content-type": "audio/mpeg", "cache-control": "public, max-age=86400", "access-control-allow-origin": ALLOWED_ORIGIN }
+    })
+}
 
 async function witchVoice(sessionId: string, clueId: string) {
     const state = await requireGame(sessionId)
     const clue = state.clues.find(c => c.id === clueId)
     if (!clue) throw new HttpError(404, "clue_not_revealed")
-    const key = `${sessionId}:${clueId}`
-    if (!voiceCache.has(key)) {
-        const audio = witchSpeech(clue.content)
-        voiceCache.set(key, audio)
-        audio.then(a => !a && voiceCache.delete(key))
-        if (voiceCache.size > 500) voiceCache.delete(voiceCache.keys().next().value!)
-    }
-    const audio = await voiceCache.get(key)
-    if (!audio) throw new HttpError(503, "voice_unavailable")
-    return new Response(audio, {
-        headers: { "content-type": "audio/mpeg", "cache-control": "public, max-age=86400", "access-control-allow-origin": ALLOWED_ORIGIN }
-    })
+    return audioResponse(await cachedSpeech(`${sessionId}:${clueId}`, "witch", clue.content))
+}
+
+/** A ghost's spoken reply. It exists only if that chat asked for a voice (see runChat). */
+async function replyVoice(sessionId: string, requestId: string) {
+    const audio = voiceCache.get(`${sessionId}:reply:${requestId}`)
+    if (!audio) throw new HttpError(404, "voice_not_found")
+    return audioResponse(await audio)
 }
 
 async function recentGames() {
@@ -351,7 +369,8 @@ const routes: [string, RegExp, (req: Request, m: RegExpMatchArray) => Promise<Re
     ["POST", /^\/api\/game\/([\w-]+)\/socket$/, (req, m) => socket(req, m[1]!)],
     ["GET", /^\/api\/game\/([\w-]+)\/director$/, (_req, m) => director(m[1]!)],
     ["GET", /^\/api\/game\/([\w-]+)\/relay-live$/, (req, m) => relayLive(req, m[1]!)],
-    ["GET", /^\/api\/game\/([\w-]+)\/voice\/([\w-]+)$/, (_req, m) => witchVoice(m[1]!, m[2]!)]
+    ["GET", /^\/api\/game\/([\w-]+)\/voice\/([\w-]+)$/, (_req, m) => witchVoice(m[1]!, m[2]!)],
+    ["GET", /^\/api\/game\/([\w-]+)\/reply-voice\/([\w-]+)$/, (_req, m) => replyVoice(m[1]!, m[2]!)]
 ]
 
 Bun.serve<RelaySocketData>({

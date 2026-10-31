@@ -109,55 +109,104 @@ export async function monsterReply(ctx: MonsterContext): Promise<MonsterReply> {
     }
 }
 
-// ----- the witch's voice -------------------------------------------------------
-// ElevenLabs when ELEVENLABS_API_KEY is set (much more characterful), otherwise OpenAI TTS.
+// ----- voices -------------------------------------------------------------------
+// ElevenLabs when ELEVENLABS_API_KEY and the speaker's voice ID are set (much more characterful),
+// otherwise OpenAI TTS. The ghosts default to premade ElevenLabs voices every account has.
+
+export type Speaker = "witch" | MonsterId
 
 const ELEVEN_KEY = process.env.ELEVENLABS_API_KEY
-const ELEVEN_VOICE = process.env.ELEVENLABS_VOICE_ID ?? ""
 const ELEVEN_MODEL = process.env.ELEVENLABS_MODEL ?? "eleven_multilingual_v2"
+// ElevenLabs rejects requests over the plan's concurrency limit (429), so calls queue up.
+const ELEVEN_CONCURRENCY = Math.max(1, Number(process.env.ELEVENLABS_CONCURRENCY ?? 2))
 const TTS_MODEL = process.env.WITCH_TTS_MODEL ?? "gpt-4o-mini-tts"
-const WITCH_VOICE = process.env.WITCH_VOICE ?? "fable"
-const WITCH_STYLE =
-    "You are an old, theatrical Halloween witch. Speak slowly with a raspy, sly, sinister-but-playful tone and a little cackle at the start. Savour the words."
 
-export const voiceProvider = ELEVEN_KEY && ELEVEN_VOICE ? "elevenlabs" : client ? "openai" : "none"
+const VOICES: Record<Speaker, { elevenlabs: string; openai: string; style: string }> = {
+    witch: {
+        elevenlabs: process.env.ELEVENLABS_VOICE_ID ?? "",
+        openai: process.env.WITCH_VOICE ?? "fable",
+        style: "You are an old, theatrical Halloween witch. Speak slowly with a raspy, sly, sinister-but-playful tone and a little cackle at the start. Savour the words."
+    },
+    sprout: {
+        elevenlabs: process.env.ELEVENLABS_VOICE_SPROUT ?? "cgSgspJ2msm6clMCkdW9", // Jessica: playful, bright, warm
+        openai: "coral",
+        style: "You are Sprout, a small friendly ghost. Warm, bright, chatty and curious, a little breathless with excitement."
+    },
+    pebble: {
+        elevenlabs: process.env.ELEVENLABS_VOICE_PEBBLE ?? "IKne3meq5aSn9XLyUdCD", // Charlie: young, energetic
+        openai: "verse",
+        style: "You are Pebble, a bouncy little ghost. Quick, playful and excitable, easily distracted, with a giggle in your voice."
+    },
+    momo: {
+        elevenlabs: process.env.ELEVENLABS_VOICE_MOMO ?? "N2lVS1w4EtoT3dr4eOWO", // Callum: husky, unsettling
+        openai: "onyx",
+        style: "You are Momo, a tall, quiet ghost. Slow, low and hushed, wary of every word, almost a whisper."
+    }
+}
 
-async function elevenLabsSpeech(text: string): Promise<ArrayBuffer> {
-    const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(ELEVEN_VOICE)}?output_format=mp3_44100_128`, {
-        method: "POST",
-        headers: { "xi-api-key": ELEVEN_KEY!, "content-type": "application/json", accept: "audio/mpeg" },
-        body: JSON.stringify({
-            text,
-            model_id: ELEVEN_MODEL,
-            // Low stability + high style = a more theatrical, wobbly delivery.
-            voice_settings: { stability: 0.3, similarity_boost: 0.8, style: 0.7, use_speaker_boost: true }
-        }),
-        signal: AbortSignal.timeout(15_000)
-    })
-    if (!res.ok) throw new Error(`elevenlabs ${res.status}: ${(await res.text()).slice(0, 160)}`)
+export function voiceProvider(speaker: Speaker): "elevenlabs" | "openai" | "none" {
+    return ELEVEN_KEY && VOICES[speaker].elevenlabs ? "elevenlabs" : client ? "openai" : "none"
+}
+
+let elevenActive = 0
+const elevenQueue: (() => void)[] = []
+async function elevenSlot<T>(run: () => Promise<T>): Promise<T> {
+    if (elevenActive >= ELEVEN_CONCURRENCY) await new Promise<void>(resolve => elevenQueue.push(resolve))
+    elevenActive++
+    try {
+        return await run()
+    } finally {
+        elevenActive--
+        elevenQueue.shift()?.()
+    }
+}
+
+async function elevenLabsSpeech(voiceId: string, text: string): Promise<ArrayBuffer> {
+    for (let attempt = 0; ; attempt++) {
+        const res = await elevenSlot(() =>
+            fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`, {
+                method: "POST",
+                headers: { "xi-api-key": ELEVEN_KEY!, "content-type": "application/json", accept: "audio/mpeg" },
+                body: JSON.stringify({
+                    text,
+                    model_id: ELEVEN_MODEL,
+                    // Low stability + high style = a more theatrical, wobbly delivery.
+                    voice_settings: { stability: 0.3, similarity_boost: 0.8, style: 0.7, use_speaker_boost: true }
+                }),
+                signal: AbortSignal.timeout(15_000)
+            })
+        )
+        // Another process (or the Director tab) can still be using the plan's slots: wait briefly and retry.
+        if (res.status === 429 && attempt < 2) {
+            await Bun.sleep(800 * (attempt + 1))
+            continue
+        }
+        if (!res.ok) throw new Error(`elevenlabs ${res.status}: ${(await res.text()).slice(0, 160)}`)
+        return res.arrayBuffer()
+    }
+}
+
+async function openAiSpeech(speaker: Speaker, text: string): Promise<ArrayBuffer> {
+    const voice = VOICES[speaker]
+    const res = await client!.audio.speech.create({ model: TTS_MODEL, voice: voice.openai, input: text, instructions: voice.style, response_format: "mp3" })
     return res.arrayBuffer()
 }
 
-async function openAiSpeech(text: string): Promise<ArrayBuffer> {
-    const res = await client!.audio.speech.create({ model: TTS_MODEL, voice: WITCH_VOICE, input: text, instructions: WITCH_STYLE, response_format: "mp3" })
-    return res.arrayBuffer()
-}
-
-/** Speaks one witch line. Returns MP3 bytes, or null if no voice service is available. */
-export async function witchSpeech(text: string): Promise<ArrayBuffer | null> {
+/** Speaks one line as the witch or a ghost. Returns MP3 bytes, or null if no voice service is available. */
+export async function speech(speaker: Speaker, text: string): Promise<ArrayBuffer | null> {
     const line = text.slice(0, 400)
-    if (voiceProvider === "elevenlabs") {
+    if (voiceProvider(speaker) === "elevenlabs") {
         try {
-            return await elevenLabsSpeech(line)
+            return await elevenLabsSpeech(VOICES[speaker].elevenlabs, line)
         } catch (err) {
-            console.error("[voice] ElevenLabs failed, trying OpenAI:", String(err).slice(0, 160))
+            console.error(`[voice] ElevenLabs failed for ${speaker}, trying OpenAI:`, String(err).slice(0, 160))
         }
     }
     if (!client) return null
     try {
-        return await openAiSpeech(line)
+        return await openAiSpeech(speaker, line)
     } catch (err) {
-        console.error("[voice] failed:", String(err).slice(0, 160))
+        console.error(`[voice] failed for ${speaker}:`, String(err).slice(0, 160))
         return null
     }
 }
