@@ -13,7 +13,7 @@ Two env files, each copied from a checked-in template. Neither real file is comm
 cd backend/server && cp .env.example .env
 ```
 
-Or run `zsh backend/set-keys.sh` once. It asks for the OpenAI and Terse keys with hidden input and writes them, plus `TERSE_ACTOR_URL`, to `server/.env`.
+Or run `zsh backend/set-keys.sh` once. It asks for the OpenAI and Terse keys with hidden input and writes them, plus `TERSE_ACTOR_URL`, to `server/.env`. For the leaderboard, run `backend/supabase/schema.sql` in the Supabase SQL Editor, then `zsh backend/set-supabase.sh`.
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -29,6 +29,8 @@ Or run `zsh backend/set-keys.sh` once. It asks for the OpenAI and Terse keys wit
 | `TERSE_ACTOR_SETUP_TIMEOUT_MS` | SDK default | Optional grant-request timeout for the generated Terse client (1000–600000). |
 | `RELAY_MODE` | hosted | `local` points setup, the server and agents at a self-hosted Relay engine instead of hosted Agent Relay. |
 | `RELAY_LOCAL_URL` | `http://localhost:8787` | Address of that local engine. |
+| `SUPABASE_URL` | none | Optional cross-game leaderboard. Without it, games are not archived and the game runs unchanged. |
+| `SUPABASE_SERVICE_ROLE_KEY` | none | Required together with `SUPABASE_URL`. Server-only: never expose it to the frontend. |
 
 The generated client reads `TERSE_ACTOR_URL` and `TERSE_API_KEY` at runtime, so changing them needs only a server restart. Run `terse actor generate` in `backend/server` again only after changing actor methods.
 
