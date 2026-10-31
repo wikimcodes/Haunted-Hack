@@ -28,7 +28,7 @@ Or run `zsh backend/set-keys.sh` once. It asks for the OpenAI and Terse keys wit
 | `TERSE_API_KEY` | none | Required together with `TERSE_ACTOR_URL`. |
 | `TERSE_ACTOR_SETUP_TIMEOUT_MS` | SDK default | Optional grant-request timeout for the generated Terse client (1000–600000). |
 
-Run `terse actor generate` in `backend/server` again after changing `TERSE_ACTOR_URL`.
+The generated client reads `TERSE_ACTOR_URL` and `TERSE_API_KEY` at runtime, so changing them needs only a server restart. Run `terse actor generate` in `backend/server` again only after changing actor methods.
 
 `demo.ts` uses the deployed actors when both `TERSE_ACTOR_URL` and `TERSE_API_KEY` are set in `server/.env`. To force local actors anyway:
 
