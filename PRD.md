@@ -477,7 +477,7 @@ Docs: https://docs.useterse.ai (quickstart, concepts, TypeScript reference). Exa
 
 Because the spy is never an `@Emittable` field, the public projection is enforced by the actor itself rather than by deleting fields before sending.
 
-**MonsterActor, one per monster per session (ID = `${sessionId}:${monsterId}`)**
+**MonsterActor, one per monster per session (ID = `${sessionId}.${monsterId}`)**
 
 - `@Persisted` conversation history with the player.
 - `@Persisted knownFacts` (facts heard from the player or from gossip).

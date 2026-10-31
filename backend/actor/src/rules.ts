@@ -1,0 +1,57 @@
+// Pure game rules and content. No I/O, so the actor stays deterministic and easy to test.
+
+export const MONSTER_IDS = ["sprout", "pebble", "momo"] as const
+export type MonsterId = (typeof MONSTER_IDS)[number]
+
+export type GamePhase = "playing" | "won" | "lost" | "expired"
+export type Mood = "idle" | "talking" | "thinking" | "nervous" | "accused"
+
+export const MONSTERS: Record<MonsterId, { name: string; personality: string; gossipChance: number }> = {
+    sprout: { name: "Sprout", personality: "The Friendly One", gossipChance: 0.6 },
+    pebble: { name: "Pebble", personality: "The Curious One", gossipChance: 0.8 },
+    momo: { name: "Momo", personality: "The Quiet One", gossipChance: 0.35 }
+}
+
+export const DEFAULT_GAME_MS = 180_000
+export const DEFAULT_REVEAL_MS = 60_000
+export const GOSSIP_PER_ROUND = 1
+export const MAX_FACT_CHARS = 140
+export const MAX_GOSSIP_CHARS = 280
+
+export function isMonsterId(value: unknown): value is MonsterId {
+    return typeof value === "string" && (MONSTER_IDS as readonly string[]).includes(value)
+}
+
+export function pickRandom<T>(items: readonly T[]): T {
+    return items[Math.floor(Math.random() * items.length)]!
+}
+
+export function otherMonsters(id: MonsterId): MonsterId[] {
+    return MONSTER_IDS.filter(m => m !== id)
+}
+
+export function clip(text: string, max: number): string {
+    const clean = text.replace(/\s+/g, " ").trim()
+    return clean.length <= max ? clean : clean.slice(0, max - 1) + "…"
+}
+
+// Witch lines are server templates: the AI never decides what a clue reveals.
+export const ECHO_LINES = [
+    (fact: string) => `One of my little friends whispered to me that you said: "${fact}"`,
+    (fact: string) => `Hehehe... I hear everything. Someone told me: "${fact}"`,
+    (fact: string) => `A tiny voice brought me your words: "${fact}"`
+]
+
+export const SILENT_LINES = [
+    (whispers: number) => `My spy has told me nothing yet... but ${whispers} secret whisper${whispers === 1 ? " has" : "s have"} passed between the monsters tonight.`,
+    (whispers: number) => `Quiet, so quiet. Still, I counted ${whispers} whisper${whispers === 1 ? "" : "s"} in the dark.`
+]
+
+export const CLEAR_LINES = [
+    (name: string) => `${name} is far too sweet to work for me. Don't waste your time.`,
+    (name: string) => `${name}? Never. That one couldn't keep a secret from me if it tried.`
+]
+
+export const DAWN_LINE = "The sun rises. You stayed too long, and now you are mine."
+export const WIN_LINE = "No! My little spy! The doors are open... for now."
+export const LOSE_LINE = "Wrong! Hehehe. You accused an innocent, and now you're trapped forever."
