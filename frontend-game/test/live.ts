@@ -17,10 +17,12 @@ await b.resume(state.sessionId)
 await Bun.sleep(1500)
 console.log("second device connected:", b.getSnapshot().connected, "same game:", b.getSnapshot().state?.sessionId === state.sessionId)
 
-await a.chat("sprout", "I saw a blue flame by the window.")
-await a.chat("momo", "The key is under the rug.")
+// Two monsters at once must both answer; a second message to a busy monster is refused.
+const both = Promise.all([a.chat("sprout", "I saw a blue flame by the window."), a.chat("momo", "The key is under the rug.")])
+console.log("busy monster refused:", (await a.chat("sprout", "hello again")) === false && a.getSnapshot().error === "still_replying")
+console.log("parallel chats ok:", (await both).every(Boolean))
 const snap = a.getSnapshot()
-console.log("chat lines:", snap.chat.length, "waitingFor:", snap.waitingFor, "error:", snap.error)
+console.log("chat lines:", snap.chat.length, "waiting:", snap.waiting, "clock offset ms:", snap.clockOffsetMs)
 
 await Bun.sleep(14_000)
 console.log("device A clues:", a.getSnapshot().state?.clues.map(c => c.kind).join(","))

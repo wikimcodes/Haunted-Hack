@@ -39,7 +39,10 @@ function json(body: unknown, status = 200): Response {
             "content-type": "application/json",
             "access-control-allow-origin": ALLOWED_ORIGIN,
             "access-control-allow-headers": "content-type",
-            "access-control-allow-methods": "GET,POST,OPTIONS"
+            "access-control-allow-methods": "GET,POST,OPTIONS",
+            "access-control-expose-headers": "x-server-time",
+            // Lets clients correct for a phone clock that is off when showing the countdown.
+            "x-server-time": String(Date.now())
         }
     })
 }
@@ -80,7 +83,11 @@ async function chat(req: Request, sessionId: string) {
     if (!chatResults.has(key)) {
         const run = runChat(sessionId, input.monsterId, text, requestId)
         chatResults.set(key, run)
-        run.catch(() => chatResults.delete(key))
+        // Keep a finished reply long enough to answer retries, then forget it.
+        run.then(
+            () => setTimeout(() => chatResults.delete(key), 60_000),
+            () => chatResults.delete(key)
+        )
     }
     return json(await chatResults.get(key))
 }
@@ -103,14 +110,17 @@ async function runChat(sessionId: string, monsterId: MonsterId, text: string, re
         otherNames: MONSTER_IDS.filter(id => id !== monsterId).map(id => MONSTER_NAMES[id])
     })
     await monster(sessionId, monsterId).rememberExchange(text, answer.reply)
-    await g.setMonsterMood(monsterId, answer.nervous ? "nervous" : "talking")
-    setTimeout(() => void g.setMonsterMood(monsterId, "idle").catch(() => {}), 4000)
+    const mood = answer.nervous ? "nervous" : "talking"
+    await g.setMonsterMood(monsterId, mood)
+    setTimeout(() => void g.settleMood(monsterId, mood).catch(() => {}), 4000)
 
     // Hand the new fact to that monster's own agent process over Relay.
     const meta: RelayMeta = { kind: "heard", sessionId, factId: fact.id }
     withRelayRetry("heard", () =>
         gamemaster.sendMessage({ to: `@${monsterId}`, text: `The human told you: "${fact.text}"`, metadata: meta, idempotencyKey: `heard-${sessionId}-${requestId}` })
-    ).catch(err => console.error("[chat] relay handoff failed:", String(err)))
+    )
+        .then(sent => g.recordHandoff(sent.id))
+        .catch(err => console.error("[chat] relay handoff failed:", String(err)))
 
     return { monsterId, reply: answer.reply, factId: fact.id, source: answer.source }
 }
@@ -171,7 +181,11 @@ async function recentGames() {
 
 // Live Relay feed for the Director screen, read from Relay's durable workspace event log.
 // While the game runs, sender and text are hidden so the screen cannot give the spy away.
-const RELAY_API = relayConfig.workspaceKey.startsWith("rk_") ? "https://cast.agentrelay.com/v1" : "https://armadillo.agentrelay.com/v1"
+const RELAY_API = relayConfig.baseUrl
+    ? `${relayConfig.baseUrl.replace(/\/$/, "")}/v1`
+    : relayConfig.workspaceKey.startsWith("rk_")
+      ? "https://cast.agentrelay.com/v1"
+      : "https://armadillo.agentrelay.com/v1"
 
 interface RelayLogEvent {
     seq: number
@@ -199,14 +213,18 @@ async function relayLive(req: Request, sessionId: string) {
         const { latestSeq } = await relayEvents()
         since = Math.max(0, latestSeq - 100)
     }
-    const { events, latestSeq } = await relayEvents(since)
+    const [{ events, latestSeq }, ownIds] = await Promise.all([relayEvents(since), game(sessionId).relayMessageIds()])
+    const mine = new Set(ownIds)
     const playing = state.phase === "playing"
     const from = state.startedAt - 2000
-    const until = playing ? Infinity : (state.clues.at(-1)?.revealedAt ?? state.deadlineAt) + 15_000
-    const rows = events
-        .filter(e => e.type === "dm.received" && e.payload?.message?.id)
-        .map(e => ({ e, at: Date.parse(e.created_at) }))
-        .filter(({ at }) => at >= from && at <= until)
+    const recent = Date.now() - 20_000
+    const dms = events.filter(e => e.type === "dm.received" && e.payload?.message?.id).map(e => ({ e, at: Date.parse(e.created_at) }))
+    // A message is linked to this game only once its sender records it, so the cursor must not move
+    // past recent unlinked messages: they may turn out to belong to this game a moment later.
+    const pending = dms.filter(({ e, at }) => !mine.has(e.payload!.message!.id!) && at >= recent)
+    const nextSince = pending.length ? Math.min(...pending.map(({ e }) => e.seq)) - 1 : Math.max(latestSeq, since)
+    const rows = dms
+        .filter(({ e, at }) => at >= from && mine.has(e.payload!.message!.id!))
         .map(({ e, at }) => {
             const m = e.payload!.message!
             const sender = m.agent_name ?? "?"
@@ -221,7 +239,7 @@ async function relayLive(req: Request, sessionId: string) {
                 length: (m.text ?? "").length
             }
         })
-    return json({ phase: state.phase, nextSince: Math.max(latestSeq, since), events: rows })
+    return json({ phase: state.phase, nextSince, events: rows })
 }
 
 // ----- local Terse socket relay ------------------------------------------------
@@ -249,7 +267,7 @@ const DIRECTOR_PAGE = fileURLToPath(new URL("../public/director.html", import.me
 // ----- router ----------------------------------------------------------------
 
 const routes: [string, RegExp, (req: Request, m: RegExpMatchArray) => Promise<Response>][] = [
-    ["GET", /^\/health$/, async () => json({ ok: true, relayWorkspace: relayConfig.workspaceName })],
+    ["GET", /^\/health$/, async () => json({ ok: true, relayWorkspace: relayConfig.workspaceName, relay: relayConfig.baseUrl ? "local" : "hosted" })],
     ["GET", /^\/director\/?$/, async () => new Response(Bun.file(DIRECTOR_PAGE), { headers: { "content-type": "text/html; charset=utf-8" } })],
     ["GET", /^\/api\/games\/recent$/, () => recentGames()],
     ["POST", /^\/api\/game\/start$/, req => startGame(req)],
@@ -298,7 +316,8 @@ Bun.serve<RelaySocketData>({
                 } catch (err) {
                     if (err instanceof HttpError) return json({ error: err.message }, err.status)
                     const message = String((err as Error)?.message ?? err)
-                    if (/game_over|game_not_started|unknown_monster/.test(message)) return json({ error: message.match(/game_over|game_not_started|unknown_monster/)![0] }, 409)
+                    const known = message.match(/game_over|game_not_started|unknown_monster|too_many_messages/)
+                    if (known) return json({ error: known[0] }, 409)
                     console.error(`[${method} ${pathname}]`, err)
                     return json({ error: "internal_error" }, 500)
                 }
@@ -308,4 +327,4 @@ Bun.serve<RelaySocketData>({
     }
 })
 
-console.log(`Spy Monster server on http://localhost:${PORT} (Relay workspace ${relayConfig.workspaceName})`)
+console.log(`Spy Monster server on http://localhost:${PORT} (${relayConfig.baseUrl ? "local" : "hosted"} Relay workspace ${relayConfig.workspaceName})`)

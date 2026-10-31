@@ -12,9 +12,17 @@ export interface RelayConfig {
     workspaceName: string
     workspaceKey: string
     tokens: Record<AgentName, string>
+    /** Set for a self-hosted Relay engine; hosted Relay when absent. */
+    baseUrl?: string
 }
 
-const CONFIG_PATH = fileURLToPath(new URL("../.relay.json", import.meta.url))
+/**
+ * RELAY_MODE=local uses Relay's open-source engine on this machine (`npx @relaycast/engine`),
+ * for when hosted Relay is overloaded. Each mode keeps its own workspace and tokens.
+ */
+export const RELAY_LOCAL = process.env.RELAY_MODE === "local"
+export const LOCAL_RELAY_URL = process.env.RELAY_LOCAL_URL ?? "http://localhost:8787"
+const CONFIG_PATH = fileURLToPath(new URL(RELAY_LOCAL ? "../.relay.local.json" : "../.relay.json", import.meta.url))
 
 export async function loadRelayConfig(): Promise<RelayConfig> {
     const file = Bun.file(CONFIG_PATH)
@@ -56,18 +64,22 @@ export async function withRelayRetry<T>(label: string, fn: () => Promise<T>, att
 export function pollInbox(
     agent: { inbox: { get(options?: { limit?: number }): Promise<{ unreadDms?: { lastMessage?: { id?: string } }[] }> } },
     handle: (messageId: string) => void,
-    intervalMs = 1500
+    intervalMs = 3000
 ): () => void {
     let stopped = false
+    let wait = intervalMs
     const tick = async () => {
         while (!stopped) {
             try {
                 const inbox = await agent.inbox.get()
                 for (const dm of inbox.unreadDms ?? []) if (dm.lastMessage?.id) handle(dm.lastMessage.id)
+                wait = intervalMs
             } catch (err) {
-                console.warn("[relay] inbox poll failed:", String(err))
+                // Relay is busy or overloaded: back off instead of adding to its load.
+                wait = Math.min(wait * 2, 20_000)
+                console.warn(`[relay] inbox poll failed, next try in ${wait / 1000}s:`, String(err).slice(0, 120))
             }
-            await Bun.sleep(intervalMs)
+            await Bun.sleep(wait)
         }
     }
     void tick()
@@ -80,7 +92,7 @@ export function pollInbox(
 export async function connectAgent(name: AgentName, config?: RelayConfig) {
     const cfg = config ?? (await loadRelayConfig())
     const token = cfg.tokens[name]
-    const relay = new AgentRelay({ agentToken: token })
+    const relay = new AgentRelay({ agentToken: token, ...(cfg.baseUrl ? { baseUrl: cfg.baseUrl } : {}) })
     relay.onError(err => console.error(`[relay:${name}]`, String(err)))
     const agent = await relay.workspace.reconnect({ apiToken: token })
     return { relay, agent }

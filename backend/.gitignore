@@ -4,3 +4,5 @@ server/.relay.json
 server/generated/
 actor/.durable-actors/
 actor/.terse/
+server/.relay.local.json
+relay-local/

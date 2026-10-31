@@ -9,6 +9,7 @@ import {
     GOSSIP_PER_ROUND,
     LOSE_LINE,
     MAX_FACT_CHARS,
+    MAX_FACTS_PER_GAME,
     MAX_GOSSIP_CHARS,
     MONSTERS,
     MONSTER_IDS,
@@ -135,6 +136,7 @@ export class GameActor extends Actor<SocketMeta, Incoming, Cue> {
     @Persisted private evidence: ClueEvidence[] = []
     @Persisted private clearedMonster: MonsterId | null = null
     @Persisted private seq = 0
+    @Persisted private handoffIds: string[] = []
 
     constructor(context: ActorContext) {
         super(context)
@@ -311,6 +313,8 @@ export class GameActor extends Actor<SocketMeta, Incoming, Cue> {
         const state = this.#requireState()
         if (!isMonsterId(monsterId)) throw new Error("unknown_monster")
         if (!this.#isLive(state)) throw new Error("game_over")
+        // Each saved list is rewritten whole on change, so keep a game's lists small.
+        if (this.facts.length >= MAX_FACTS_PER_GAME) throw new Error("too_many_messages")
         const fact: Fact = { id: `f${this.facts.length + 1}`, text: clip(text, MAX_FACT_CHARS), toldTo: monsterId, createdAt: Date.now() }
         this.facts = [...this.facts, fact]
         this.knowledge = { ...this.knowledge, [monsterId]: [...(this.knowledge[monsterId] ?? []), fact.id] }
@@ -319,10 +323,17 @@ export class GameActor extends Actor<SocketMeta, Incoming, Cue> {
     }
 
     async setMonsterMood(monsterId: string, mood: Mood): Promise<void> {
-        if (!isMonsterId(monsterId) || !this.publicState) return
+        if (!isMonsterId(monsterId) || this.publicState?.phase !== "playing") return
         this.#setMood(monsterId, mood)
-        if (mood === "talking") this.#cue("MONSTER_SPEAKING", monsterId)
+        if (mood === "talking" || mood === "nervous") this.#cue("MONSTER_SPEAKING", monsterId)
         if (mood === "thinking") this.#cue("MONSTER_THINKING", monsterId)
+    }
+
+    /** Returns a monster to idle only if nothing changed its mood since `expected` was set. */
+    async settleMood(monsterId: string, expected: Mood): Promise<void> {
+        if (!isMonsterId(monsterId) || this.publicState?.phase !== "playing") return
+        const current = this.publicState.monsters.find(m => m.id === monsterId)?.mood
+        if (current === expected) this.#setMood(monsterId, "idle")
     }
 
     #setMood(monsterId: MonsterId, mood: Mood): void {
@@ -373,11 +384,23 @@ export class GameActor extends Actor<SocketMeta, Incoming, Cue> {
 
     /** Step 2: the sender confirms the Relay message it actually sent. */
     async confirmGossip(gossipId: string, relayMessageId: string, text: string): Promise<void> {
+        this.#requireState()
+        // The receiver may have processed the DM first; keep its status but still record what was sent.
         this.gossip = this.gossip.map(g =>
-            g.id === gossipId && g.status === "reserved" ? { ...g, status: "sent", relayMessageId, text: clip(text, MAX_GOSSIP_CHARS) } : g
+            g.id === gossipId
+                ? { ...g, status: g.status === "reserved" ? "sent" : g.status, relayMessageId: g.relayMessageId ?? relayMessageId, text: clip(text, MAX_GOSSIP_CHARS) }
+                : g
         )
         this.#log("GOSSIP_SENT", { gossipId, relayMessageId })
         this.#cue("GOSSIP_STARTED")
+    }
+
+    /** The sender could not deliver the message: free the reservation so it does not burn the round's quota. */
+    async releaseGossip(gossipId: string): Promise<void> {
+        this.#requireState()
+        const before = this.gossip.length
+        this.gossip = this.gossip.filter(g => !(g.id === gossipId && g.status === "reserved"))
+        if (this.gossip.length !== before) this.#log("GOSSIP_RELEASED", { gossipId })
     }
 
     /**
@@ -385,6 +408,7 @@ export class GameActor extends Actor<SocketMeta, Incoming, Cue> {
      * and must match the reservation, otherwise the facts are not learned.
      */
     async receiveGossip(gossipId: string, relayFrom: string, to: string, relayMessageId: string): Promise<{ ok: boolean; facts: Fact[] }> {
+        this.#requireState()
         const g = this.gossip.find(x => x.id === gossipId)
         if (!g || g.from !== relayFrom || g.to !== to || (g.relayMessageId && g.relayMessageId !== relayMessageId)) {
             this.#log("GOSSIP_REJECTED", { gossipId, relayFrom, to })
@@ -424,6 +448,22 @@ export class GameActor extends Actor<SocketMeta, Incoming, Cue> {
         return { accepted: true }
     }
 
+    /** The server records the Relay message it used to hand a fact to a monster's agent. */
+    async recordHandoff(relayMessageId: string): Promise<void> {
+        this.#requireState()
+        if (!this.handoffIds.includes(relayMessageId)) this.handoffIds = [...this.handoffIds, relayMessageId]
+    }
+
+    /** Every Relay message ID that belongs to this game (for the Director's live feed). IDs only, no content. */
+    async relayMessageIds(): Promise<string[]> {
+        return [
+            ...this.handoffIds,
+            ...this.gossip.flatMap(g => (g.relayMessageId ? [g.relayMessageId] : [])),
+            ...this.reports.map(r => r.relayMessageId),
+            ...this.rejectedReports.map(r => r.relayMessageId)
+        ]
+    }
+
     /** Who a monster could gossip to. Exposed so agents do not hard-code the cast. */
     async gossipTargets(monsterId: string): Promise<MonsterId[]> {
         return isMonsterId(monsterId) ? otherMonsters(monsterId) : []
@@ -451,6 +491,10 @@ export class GameActor extends Actor<SocketMeta, Incoming, Cue> {
     // ----- sockets ---------------------------------------------------------
 
     async onConnect(socket: Socket): Promise<void> {
+        if (!this.publicState) {
+            socket.reject(4004, "game_not_found")
+            return
+        }
         socket.setTags(socket.metadata.role)
         this.setWebSocketAutoResponse({ request: "ping", response: "pong" })
     }
