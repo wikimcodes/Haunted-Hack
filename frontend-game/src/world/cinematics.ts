@@ -21,29 +21,51 @@ export interface LightProfile {
     background: number; exposure: number; fog: number; witch: number; dawn: number
 }
 const PROFILES: Record<PresentationState, LightProfile> = {
-    introduction: { candles: 1, moon: 1, fill: 1, hemisphere: 1, environment: 1, background: .65, exposure: 1.1, fog: .025, witch: 1, dawn: 0 },
-    suspicion: { candles: .68, moon: .80, fill: .85, hemisphere: .75, environment: .8, background: .5, exposure: 1.02, fog: .030, witch: 1, dawn: 0 },
+    introduction: { candles: 1, moon: 1, fill: 1, hemisphere: 1, environment: 1, background: .42, exposure: 1.04, fog: .027, witch: 1, dawn: 0 },
+    suspicion: { candles: .62, moon: .72, fill: .70, hemisphere: .65, environment: .65, background: .32, exposure: .99, fog: .032, witch: 1, dawn: 0 },
     won: { candles: .9, moon: 1.15, fill: 1, hemisphere: 1.3, environment: 1.25, background: .85, exposure: 1.16, fog: .018, witch: 0, dawn: 1 },
     lost: { candles: .04, moon: .28, fill: .15, hemisphere: .18, environment: .28, background: .13, exposure: .9, fog: .042, witch: 1, dawn: 0 }
 }
 /** Public, global story state only. No monster identity or hidden role enters these profiles. */
 export function lightProfile(state: PresentationState = "introduction"): LightProfile { return { ...PROFILES[state] } }
-export const REVEAL_ENTER = .9
+/** One six-second cue shared by camera, lighting and audio's director elapsed time. */
+export const REVEAL_HOLD = .65
+export const REVEAL_ENTER = .95
+export const REVEAL_LIGHT_FULL = 1.2
 export const REVEAL_RETURN = 4.6
 export const REVEAL_DURATION = 6
 export function ease(value: number): number { const t = MathUtils.clamp(value, 0, 1); return t * t * (3 - 2 * t) }
+/** Violet light arrives after the held breath and camera move, never before it. */
 export function revealEnvelope(elapsed: number): number {
-    if (!Number.isFinite(elapsed) || elapsed < 0 || elapsed >= REVEAL_DURATION) return 0
-    if (elapsed < REVEAL_ENTER) return ease(elapsed / REVEAL_ENTER)
+    if (!Number.isFinite(elapsed) || elapsed < REVEAL_ENTER || elapsed >= REVEAL_DURATION) return 0
+    if (elapsed < REVEAL_LIGHT_FULL) return ease((elapsed - REVEAL_ENTER) / (REVEAL_LIGHT_FULL - REVEAL_ENTER))
     if (elapsed < REVEAL_RETURN) return 1
     return 1 - ease((elapsed - REVEAL_RETURN) / (REVEAL_DURATION - REVEAL_RETURN))
 }
-/** Slow, restrained brightness modulation rather than a strobe. */
+/** Smooth darkness, followed by a local apparition, then the original scene light. No flashing. */
+export function revealLighting(elapsed: number) {
+    const valid = Number.isFinite(elapsed) && elapsed >= 0 && elapsed < REVEAL_DURATION
+    const darkness = !valid ? 0 : elapsed < .22 ? ease(elapsed / .22)
+        : elapsed < REVEAL_RETURN ? 1 : 1 - ease((elapsed - REVEAL_RETURN) / (REVEAL_DURATION - REVEAL_RETURN))
+    const presence = revealEnvelope(elapsed)
+    return {
+        darkness, presence,
+        candles: 1 - .93 * darkness + .15 * presence,
+        fill: 1 - .90 * darkness,
+        moon: 1 - .78 * darkness,
+        environment: 1 - .84 * darkness,
+        background: 1 - .52 * darkness
+    }
+}
+/** Sparse, slow practical-light variation. The reveal itself has no periodic flicker. */
 export function candleModulation(seconds: number, phase: number, revealing: number, reducedMotion: boolean): number {
-    if (reducedMotion) return 1 - .16 * revealing
-    const ordinary = .035 * Math.sin(seconds * 3.2 + phase) + .015 * Math.sin(seconds * 13 + phase)
-    const reveal = .08 * Math.sin(seconds * 2.3 + phase)
-    return MathUtils.clamp(1 + ordinary * (1 - revealing) - .16 * revealing + reveal * revealing, .7, 1.05)
+    if (reducedMotion) return 1
+    const ordinary = .028 * Math.sin(seconds * 2.1 + phase) + .012 * Math.sin(seconds * .73 + phase)
+    return 1 + ordinary * (1 - MathUtils.clamp(revealing, 0, 1))
+}
+/** Cinematics keep elapsed time at low FPS; only movement/physics should clamp this value. */
+export function cinematicFrameDelta(now: number, previous: number): number {
+    return Number.isFinite(now) && Number.isFinite(previous) ? Math.max(0, (now - previous) / 1000) : 0
 }
 export function capturePose(camera: PerspectiveCamera): CameraPose {
     return { position: camera.position.clone(), quaternion: camera.quaternion.clone(), fov: camera.fov }
@@ -107,7 +129,8 @@ export class CameraDirector {
             this.reveal.elapsed += dt
             const { elapsed, from, shot } = this.reveal
             const destination = focus ? this.options.focus(focus, this.walkingPose) : this.walkingPose
-            if (elapsed < REVEAL_ENTER) blend(this.camera, from, shot, ease(elapsed / REVEAL_ENTER))
+            if (elapsed < REVEAL_HOLD) applyPose(this.camera, from)
+            else if (elapsed < REVEAL_ENTER) blend(this.camera, from, shot, ease((elapsed - REVEAL_HOLD) / (REVEAL_ENTER - REVEAL_HOLD)))
             else if (elapsed < REVEAL_RETURN) applyPose(this.camera, shot)
             else if (elapsed < REVEAL_DURATION) blend(this.camera, shot, destination, ease((elapsed - REVEAL_RETURN) / (REVEAL_DURATION - REVEAL_RETURN)))
             else {

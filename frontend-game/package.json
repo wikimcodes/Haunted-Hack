@@ -9,7 +9,8 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit -p . && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "test": "node --import tsx --test src/connection.test.ts src/world/collision.test.ts src/world/cinematics.test.ts"
+    "test": "node --import tsx --test src/*.test.ts src/world/*.test.ts src/audio/*.test.ts",
+    "audio:elevenlabs": "node scripts/generate-audio-elevenlabs.mjs"
   },
   "peerDependencies": {
     "react": ">=18"

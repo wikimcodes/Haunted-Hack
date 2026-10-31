@@ -1,0 +1,28 @@
+{
+  "library-room": {
+    "source": "elevenlabs",
+    "model": "eleven_text_to_sound_v2",
+    "promptInfluence": 0.6,
+    "prompt": "Unsettling paranormal horror ambience. Reversed ghostly whispers, a faint child humming far away, nails scraping slowly on wood, low metallic groans, irregular creaks very close, a dark pulsing drone that rises and falls, sudden quiet moments then a distant heavy thud. Eerie, cursed and deeply uncomfortable. No melody.",
+    "loop": true,
+    "decodedMP3": {
+      "seconds": 29.5,
+      "peakDbFS": -8.4,
+      "meanDbFS": -25.5
+    },
+    "bytes": 473172
+  },
+  "witch-reveal": {
+    "source": "elevenlabs",
+    "model": "eleven_text_to_sound_v2",
+    "promptInfluence": 0.6,
+    "prompt": "Horror movie witch reveal sting. Half a second of sudden held-breath silence, a fast reversed whoosh rushing in, then at about one second a massive deep cinematic boom with a dissonant screeching string stab and shattering glass, followed by a raspy distorted witch cackle echoing through a stone hall and a long eerie reverb tail fading to silence.",
+    "loop": false,
+    "decodedMP3": {
+      "seconds": 6.0,
+      "peakDbFS": -5.4,
+      "meanDbFS": -23.9
+    },
+    "bytes": 97009
+  }
+}

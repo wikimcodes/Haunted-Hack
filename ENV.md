@@ -29,6 +29,11 @@ Or run `zsh backend/set-keys.sh` once. It asks for the OpenAI and Terse keys wit
 | `TERSE_ACTOR_SETUP_TIMEOUT_MS` | SDK default | Optional grant-request timeout for the generated Terse client (1000–600000). |
 | `RELAY_MODE` | hosted | `local` points setup, the server and agents at a self-hosted Relay engine instead of hosted Agent Relay. |
 | `RELAY_LOCAL_URL` | `http://localhost:8787` | Address of that local engine. |
+| `WITCH_VOICE` | `fable` | OpenAI text-to-speech voice for spoken clues. |
+| `WITCH_TTS_MODEL` | `gpt-4o-mini-tts` | OpenAI text-to-speech model. |
+| `ELEVENLABS_API_KEY` | none | With `ELEVENLABS_VOICE_ID`, the witch speaks with ElevenLabs instead of OpenAI. Any ElevenLabs error falls back to OpenAI. `zsh backend/set-elevenlabs.sh` saves it with hidden input. |
+| `ELEVENLABS_VOICE_ID` | none | ElevenLabs voice for the witch. Required for ElevenLabs speech. |
+| `ELEVENLABS_MODEL` | `eleven_multilingual_v2` | ElevenLabs text-to-speech model. |
 | `SUPABASE_URL` | none | Optional cross-game leaderboard. Without it, games are not archived and the game runs unchanged. |
 | `SUPABASE_SERVICE_ROLE_KEY` | none | Required together with `SUPABASE_URL`. Server-only: never expose it to the frontend. |
 
@@ -59,6 +64,13 @@ cd frontend-game && cp .env.example .env.local
 | `VITE_API_URL` | `http://localhost:3001` | Game API base URL. Restart Vite after changing it. For production, set it before `npm run build`. |
 
 Vite embeds every `VITE_*` value in the public browser bundle. Keep OpenAI, Terse and Relay credentials in the backend only.
+
+## Build-time variables
+
+| Variable | Where | Purpose |
+|---|---|---|
+| `ELEVENLABS_API_KEY` | `backend/server/.env` | Used by `npm run audio:elevenlabs` in `frontend-game/` to regenerate the room loop and witch reveal sounds. The server also reads it at runtime for the witch's voice (see the backend table). Never sent to the browser. |
+| `ELEVENLABS_SFX_MODEL` | shell | Optional. Sound Effects model, default `eleven_text_to_sound_v2`. |
 
 ## Test-only variables
 

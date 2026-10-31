@@ -2,8 +2,8 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import { PerspectiveCamera, Vector3 } from "three"
 import {
-    CameraDirector, REVEAL_DURATION, REVEAL_ENTER, REVEAL_RETURN,
-    candleModulation, capturePose, lightProfile, poseLookingAt, revealEnvelope, type CameraPose
+    CameraDirector, REVEAL_DURATION, REVEAL_HOLD, REVEAL_ENTER, REVEAL_LIGHT_FULL, REVEAL_RETURN,
+    candleModulation, cinematicFrameDelta, capturePose, lightProfile, poseLookingAt, revealEnvelope, revealLighting, type CameraPose
 } from "./cinematics"
 
 function assertPose(camera: PerspectiveCamera, expected: CameraPose) {
@@ -28,14 +28,16 @@ function setup(reducedMotion = false) {
     return { camera, walking, focus, witch, changes, director }
 }
 
-test("reveal eases toward the witch and restores the exact walking pose after six seconds", () => {
+test("reveal holds still before the witch shot and restores the exact walking pose after six seconds", () => {
     const { camera, walking, witch, director, changes } = setup()
-    director.update(REVEAL_ENTER / 2, true, null, 1)
+    director.update(REVEAL_HOLD, true, null, 1)
+    assertPose(camera, walking)
+    director.update((REVEAL_ENTER - REVEAL_HOLD) / 2, true, null, 1)
     assert.ok(director.movementBlocked)
     assert.ok(director.isRevealing)
     assert.ok(camera.position.distanceTo(walking.position) > 0)
     assert.ok(camera.position.distanceTo(witch.position) > 0)
-    director.update(REVEAL_ENTER / 2, true, null, 1)
+    director.update((REVEAL_ENTER - REVEAL_HOLD) / 2, true, null, 1)
     assertPose(camera, witch)
     director.update(REVEAL_RETURN - REVEAL_ENTER, true, null, 1)
     assertPose(camera, witch)
@@ -112,7 +114,8 @@ test("reduced motion keeps the player camera still during focus and reveal", () 
 
 test("reveal brightness has smooth endpoints and candle changes are bounded", () => {
     assert.equal(revealEnvelope(0), 0)
-    assert.equal(revealEnvelope(REVEAL_ENTER), 1)
+    assert.equal(revealEnvelope(REVEAL_ENTER), 0)
+    assert.equal(revealEnvelope(REVEAL_LIGHT_FULL), 1)
     assert.equal(revealEnvelope(REVEAL_RETURN), 1)
     assert.equal(revealEnvelope(REVEAL_DURATION), 0)
     assert.equal(revealEnvelope(NaN), 0)
@@ -120,8 +123,9 @@ test("reveal brightness has smooth endpoints and candle changes are bounded", ()
         const strength = revealEnvelope(t)
         assert.ok(strength >= 0 && strength <= 1)
         const value = candleModulation(t, 2.31, strength, false)
-        assert.ok(value >= .7 && value <= 1.05)
-        assert.equal(candleModulation(t, 2.31, 1, true), .84)
+        assert.ok(value >= .96 && value <= 1.04)
+        assert.equal(candleModulation(t, 2.31, 1, true), 1)
+        assert.equal(candleModulation(t, 2.31, 1, false), 1, "the reveal has no periodic brightness flashes")
     }
 })
 
@@ -137,4 +141,59 @@ test("ending lighting changes the whole scene without selecting a monster", () =
     assert.equal(won.dawn, 1)
     intro.candles = 0
     assert.equal(lightProfile("introduction").candles, 1)
+})
+
+
+test("candles darken before the apparition; window light stays absent until the cue at .95 seconds", () => {
+    const resting = revealLighting(-1)
+    assert.deepEqual(revealLighting(0), resting)
+    const held = revealLighting(.65)
+    assert.ok(held.candles < .1)
+    assert.ok(held.moon > .15, "a residual moonlight path remains readable")
+    assert.equal(held.presence, 0)
+    assert.equal(revealLighting(REVEAL_ENTER).presence, 0)
+    assert.ok(revealLighting(1.05).presence > 0)
+    assert.equal(revealLighting(REVEAL_LIGHT_FULL).presence, 1)
+    assert.ok(revealLighting(REVEAL_LIGHT_FULL).candles > held.candles)
+    assert.deepEqual(revealLighting(REVEAL_DURATION), resting)
+    assert.deepEqual(revealLighting(Infinity), resting)
+    let prior = 0
+    for (let t = REVEAL_ENTER; t < REVEAL_LIGHT_FULL; t += .01) {
+        const next = revealLighting(t).presence
+        assert.ok(next >= prior, "the arrival is one smooth rise")
+        prior = next
+    }
+    let last = revealLighting(REVEAL_RETURN)
+    for (let t = REVEAL_RETURN; t <= REVEAL_DURATION; t += .01) {
+        const next = revealLighting(t)
+        assert.ok(next.presence <= last.presence)
+        assert.ok(next.candles >= last.candles)
+        assert.ok(next.fill >= last.fill)
+        last = next
+    }
+})
+
+test("a five-FPS reveal still ends at six real seconds instead of replaying its audio", () => {
+    const { camera, walking, director, changes } = setup()
+    let previous = 1000
+    for (let i = 1; i <= 30; i++) {
+        const now = 1000 + i * 200
+        const elapsed = cinematicFrameDelta(now, previous)
+        assert.equal(elapsed, .2, "cinematic time is not clamped to the physics .05 seconds")
+        director.update(elapsed, true, null, 1)
+        previous = now
+    }
+    assert.equal(director.isRevealing, false)
+    assertPose(camera, walking)
+    assert.deepEqual(changes, [true, false])
+})
+
+test("one long visible frame finishes the cue while invalid frame times cannot rewind it", () => {
+    const { camera, walking, director } = setup()
+    director.update(cinematicFrameDelta(8000, 0), true, null, 1)
+    assert.equal(director.isRevealing, false)
+    assertPose(camera, walking)
+    assert.equal(cinematicFrameDelta(100, 200), 0)
+    assert.equal(cinematicFrameDelta(NaN, 200), 0)
+    assert.equal(cinematicFrameDelta(200, Infinity), 0)
 })

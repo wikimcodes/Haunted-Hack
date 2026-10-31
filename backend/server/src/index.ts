@@ -321,12 +321,26 @@ async function qrCode(req: Request) {
 }
 
 const DIRECTOR_PAGE = fileURLToPath(new URL("../public/director.html", import.meta.url))
+const DIRECTOR_ASSETS: Record<string, { path: string; type: string }> = Object.fromEntries([
+    ["director.css", "text/css; charset=utf-8"],
+    ["director.js", "text/javascript; charset=utf-8"],
+    ["director-model.mjs", "text/javascript; charset=utf-8"]
+].map(([name, type]) => [name, { path: fileURLToPath(new URL(`../public/${name}`, import.meta.url)), type }]))
+
 
 // ----- router ----------------------------------------------------------------
 
 const routes: [string, RegExp, (req: Request, m: RegExpMatchArray) => Promise<Response>][] = [
     ["GET", /^\/health$/, async () => json({ ok: true, relayWorkspace: relayConfig.workspaceName, relay: relayConfig.baseUrl ? "local" : "hosted" })],
     ["GET", /^\/director\/?$/, async () => new Response(Bun.file(DIRECTOR_PAGE), { headers: { "content-type": "text/html; charset=utf-8" } })],
+    ["GET", /^\/(director\.(?:css|js)|director-model\.mjs)$/, async (_req, match) => {
+        const asset = DIRECTOR_ASSETS[match[1]!]!
+        return new Response(Bun.file(asset.path), { headers: { "content-type": asset.type, "cache-control": "no-cache" } })
+    }],
+    ["GET", /^\/director-portraits\/(sprout|pebble|momo|witch)\.png$/, async (_req, match) => {
+        const portrait = fileURLToPath(new URL(`../public/director-portraits/${match[1]}.png`, import.meta.url))
+        return new Response(Bun.file(portrait), { headers: { "content-type": "image/png", "cache-control": "no-cache" } })
+    }],
     ["GET", /^\/api\/games\/recent$/, () => recentGames()],
     ["GET", /^\/api\/qr$/, req => qrCode(req)],
     ["GET", /^\/api\/leaderboard$/, async () => json((await leaderboard()) ?? { disabled: true })],

@@ -1,0 +1,153 @@
+{
+  "description": "Real existing game GLB model portraits, rendered in an isolated Blender process. No AI-generated or substituted character artwork.",
+  "assets": [
+    {
+      "id": "sprout",
+      "file": "sprout.png",
+      "pixels": [
+        384,
+        384
+      ],
+      "source": "sprout.glb",
+      "sourceSha256": "17d0904ea2b62ff20dc258aa4584cd43108ff5d3bdbb0d7e3a75abb104f191b8",
+      "boundsBlenderZUp": {
+        "min": [
+          -1.102805495262146,
+          -0.3041580021381378,
+          -0.02078542858362198
+        ],
+        "max": [
+          0.9718785285949707,
+          0.3338700532913208,
+          2.011536121368408
+        ]
+      },
+      "frame": 1,
+      "materialsAltered": false,
+      "camera": [
+        0.07741863280534744,
+        -4.0,
+        1.5849652290344238
+      ],
+      "target": [
+        -0.022581368684768677,
+        0.0,
+        1.5049651861190796
+      ],
+      "orthographicScale": 1.34,
+      "blenderVersion": "5.2.1 LTS",
+      "bytes": 128928
+    },
+    {
+      "id": "pebble",
+      "file": "pebble.png",
+      "pixels": [
+        384,
+        384
+      ],
+      "source": "pebble.glb",
+      "sourceSha256": "b5cd0138cc6514a1d7a0f59e9127f0c46abdb0fcab517115e2cca058905a0ad3",
+      "boundsBlenderZUp": {
+        "min": [
+          -1.0104732513427734,
+          -0.30018407106399536,
+          -0.006417235359549522
+        ],
+        "max": [
+          1.0735318660736084,
+          0.3521195650100708,
+          2.0827465057373047
+        ]
+      },
+      "frame": 1,
+      "materialsAltered": false,
+      "camera": [
+        0.07658156007528305,
+        -4.0,
+        1.65496027469635
+      ],
+      "target": [
+        -0.02341844141483307,
+        0.0,
+        1.5749602317810059
+      ],
+      "orthographicScale": 1.34,
+      "blenderVersion": "5.2.1 LTS",
+      "bytes": 127306
+    },
+    {
+      "id": "momo",
+      "file": "momo.png",
+      "pixels": [
+        384,
+        384
+      ],
+      "source": "momo.glb",
+      "sourceSha256": "3d06ac181fe9e460aad5549aacb609362c74ce6849d149d46595c155b048bf7c",
+      "boundsBlenderZUp": {
+        "min": [
+          -1.0720683336257935,
+          -0.3572334349155426,
+          -0.052169203758239746
+        ],
+        "max": [
+          0.992570161819458,
+          0.29104089736938477,
+          2.161773204803467
+        ]
+      },
+      "frame": 1,
+      "materialsAltered": false,
+      "camera": [
+        0.07562490552663803,
+        -4.0,
+        1.7349544763565063
+      ],
+      "target": [
+        -0.02437509223818779,
+        0.0,
+        1.654954433441162
+      ],
+      "orthographicScale": 1.34,
+      "blenderVersion": "5.2.1 LTS",
+      "bytes": 126207
+    },
+    {
+      "id": "witch",
+      "file": "witch.png",
+      "pixels": [
+        384,
+        384
+      ],
+      "source": "witch.glb",
+      "sourceSha256": "57b3830aa6e2b786e999d07930202c85643c2b84d3bb88dc6495d87db5e111d5",
+      "boundsBlenderZUp": {
+        "min": [
+          -0.4542052745819092,
+          -0.3041290044784546,
+          -0.009898878633975983
+        ],
+        "max": [
+          0.5840745568275452,
+          0.40672406554222107,
+          2.8100030422210693
+        ]
+      },
+      "frame": 1,
+      "materialsAltered": false,
+      "camera": [
+        0.10001306235790253,
+        -4.0,
+        2.401702642440796
+      ],
+      "target": [
+        1.3062730431556702e-05,
+        0.0,
+        2.321702718734741
+      ],
+      "orthographicScale": 1.6,
+      "blenderVersion": "5.2.1 LTS",
+      "bytes": 117250
+    }
+  ]
+}
