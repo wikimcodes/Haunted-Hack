@@ -5,16 +5,20 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js"
 import { HDRLoader } from "three/addons/loaders/HDRLoader.js"
 import type { MonsterId, Mood } from "../types"
 import { LibraryAudio, type AudioStatus } from "../audio/LibraryAudio"
-import { EYE_HEIGHT, isWalkable, moveWithCollisions, OBSTACLES, SPAWN } from "./collision"
+import { EYE_HEIGHT, EXIT_DOOR, isWalkable, moveWithCollisions, OBSTACLES, SPAWN } from "./collision"
+import { createEscapeExterior, type EscapeExterior } from "./escapeExterior"
+import { ExitJourney, nextExitWaypoint, outdoorBlend } from "./exitJourney"
 import { CameraDirector, DEFAULT_PRESENTATION, SCARE_DURATION, candleModulation, cinematicFrameDelta, lightProfile, poseLookingAt, revealLighting, scareLighting, strongerLighting, type CameraPose, type PresentationManifest, type PresentationState } from "./cinematics"
 import "./world.css"
 
-export interface WorldHandle { lock(): void; unlock(): void; reset(): void; unlockAudio(): Promise<boolean> }
+export interface WorldHandle { lock(): void; unlock(): void; reset(): void; guideToExit(): void; unlockAudio(): Promise<boolean> }
 export interface WorldProps {
     active: boolean
     interactive: boolean
     moods: Partial<Record<MonsterId, Mood>>
     doorOpen: boolean
+    /** Fired once, only after a real walk through the open doorway and across the courtyard. */
+    onEscaped?: () => void
     presentation?: PresentationState
     focusMonster?: MonsterId | null
     revealToken?: number
@@ -88,6 +92,7 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
         lock: () => runtime.current?.lock(),
         unlock: () => runtime.current?.unlock(),
         reset: () => runtime.current?.reset(),
+        guideToExit: () => runtime.current?.guideToExit(),
         unlockAudio: () => runtime.current?.unlockAudio() ?? Promise.resolve(false)
     }), [])
 
@@ -118,6 +123,9 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
         let pointerX = 0
         let pointerY = 0
         let lastDoorOpen = false
+        const exitJourney = new ExitJourney()
+        let exterior: EscapeExterior | null = null
+        const insideFog = new THREE.Color("#111d25"), outsideFog = new THREE.Color("#c7c6af")
         let lastScareToken = latest.current.scareToken ?? 0
         let scareStart = -Infinity
         let scareTimer: ReturnType<typeof setTimeout> | undefined
@@ -159,6 +167,19 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
         const spirits = new Map<MonsterId, Spirit>()
         let door: Spirit | null = null
         let witch: Spirit | null = null
+        // Brass wayfinding studs follow the unobstructed front aisle, then the real doorway.
+        const guidePoints: THREE.Vector3[] = []
+        const legs = [[-.7,4.35],[2.85,2.05],[2.85,-2.9],[11,-2.9]]
+        for (let i=1; i<legs.length; i++) {
+            const [ax,az]=legs[i-1], [bx,bz]=legs[i]
+            const count=Math.ceil(Math.hypot(bx-ax,bz-az)/.48)
+            for (let n=0;n<count;n++) guidePoints.push(new THREE.Vector3(THREE.MathUtils.lerp(ax,bx,n/count),.067,THREE.MathUtils.lerp(az,bz,n/count)))
+        }
+        const exitStuds = new THREE.InstancedMesh(new THREE.CylinderGeometry(.045,.045,.007,8), new THREE.MeshStandardMaterial({color:"#c9aa6c",emissive:"#bd913f",emissiveIntensity:.65,roughness:.64,metalness:.3}),guidePoints.length)
+        exitStuds.name="Brass path to the morning courtyard"
+        guidePoints.forEach((point,index)=>exitStuds.setMatrixAt(index,new THREE.Matrix4().makeTranslation(point.x,point.y,point.z)))
+        exitStuds.visible=false
+        scene.add(exitStuds)
         const witchMaterials: { material: THREE.MeshStandardMaterial; opacity: number; emission: number; eyes: boolean }[] = []
         const candleMaterials = new Map<THREE.MeshStandardMaterial, number>()
         const spiritMaterials = new Map<THREE.MeshPhysicalMaterial, { color: THREE.Color; sheen: THREE.Color | null }>()
@@ -295,6 +316,7 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
             } catch { fallback() }
         }
         function reset() {
+            exitJourney.reset()
             director?.cancel()
             clearKeys()
             camera.position.fromArray(presentationConfig.cameraPresets.wide.position)
@@ -305,17 +327,30 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
             needsRender = true
             syncAudio()
         }
+        function doorwayPassable(): boolean {
+            const open = door?.actions.Open
+            return latest.current.doorOpen && !!open && open.time >= open.getClip().duration - .06
+        }
+        function guideToExit() {
+            if (!ready || !latest.current.doorOpen) return
+            director?.cancel()
+            clearKeys()
+            const target = nextExitWaypoint(camera.position)
+            camera.lookAt(target.x, EYE_HEIGHT, target.z)
+            orientation.setFromQuaternion(camera.quaternion, "YXZ")
+            needsRender = true
+        }
         function syncAudio() {
             camera.getWorldDirection(audioForward)
             audioRight.crossVectors(audioForward, camera.up).normalize()
             audioWindow.fromArray(presentationConfig.cameraPresets.witch.target).sub(camera.position).normalize()
             audio.update({
-                active: latest.current.active && ready && !failed, muted: latest.current.soundMuted ?? false,
+                active: latest.current.active && ready && !failed && !(latest.current.doorOpen && camera.position.x > 4.65), muted: latest.current.soundMuted ?? false,
                 reveal: director?.isRevealing ? { token: latest.current.revealToken ?? 0, elapsed: director.elapsed, strength: director.revealStrength } : null,
                 pan: audioRight.dot(audioWindow) * .65
             })
         }
-        runtime.current = { lock, unlock, reset, clearKeys, syncAudio, unlockAudio: () => audio.unlock() }
+        runtime.current = { lock, unlock, reset, guideToExit, clearKeys, syncAudio, unlockAudio: () => audio.unlock() }
 
         function updateTarget(id: MonsterId | null) {
             if (hovered === id) return
@@ -580,6 +615,9 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
                     spirits.set(id as MonsterId, spirit)
                     play(spirit, "Idle")
                     spirit.mixer.update(0.4 + IDS.indexOf(id as MonsterId) * 0.37)
+                } else if (id === "environment") {
+                    exterior = createEscapeExterior(gltf.scene, {doorCenterZ: EXIT_DOOR.centerZ})
+                    scene.add(exterior.root)
                 } else if (id === "door") door = animated(gltf)
                 else if (id === "witch") {
                     witch = animated(gltf)
@@ -647,6 +685,9 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
             lastTime = time
             if (failed || document.hidden) return
             const state = latest.current
+            if (!state.doorOpen) exitJourney.reset()
+            if (exterior) exterior.root.visible = state.doorOpen
+            exitStuds.visible = state.doorOpen && state.active
             if (ready && director) {
                 const wasOwned = director.movementBlocked
                 director.update(elapsed, state.active, state.focusMonster ?? null, state.revealToken ?? 0)
@@ -679,8 +720,13 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
                         const next = moveWithCollisions(camera.position, {
                             x: (movingDirection.x * forward - movingDirection.z * right) * speed,
                             z: (movingDirection.z * forward + movingDirection.x * right) * speed
-                        }, state.doorOpen)
+                        }, doorwayPassable())
+                        const escaped = exitJourney.step(camera.position, next, doorwayPassable() && state.presentation === "won")
                         camera.position.set(next.x, EYE_HEIGHT, next.z)
+                        if (escaped) {
+                            unlock()
+                            latest.current.onEscaped?.()
+                        }
                     }
                     if (time - lastTargetCheck > 100) { updateTarget(selectAt(0, 0)); lastTargetCheck = time }
                 } else updateTarget(null)
@@ -731,7 +777,16 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
                 scene.environmentIntensity = .085 * currentLight.environment * cue.environment
                 scene.backgroundIntensity = currentLight.background * cue.background
                 renderer.toneMappingExposure = currentLight.exposure
-                if (scene.fog instanceof THREE.FogExp2) scene.fog.density = currentLight.fog + .006 * reveal
+                const outside = state.doorOpen ? outdoorBlend(camera.position) : 0
+                exterior?.update(state.doorOpen ? Math.max(.5, currentLight.dawn) : 0)
+                const locationLabel = outside > .15 ? "Morning courtyard. Use W A S D to walk along the stone path into daylight." : "Haunted library. Drag to look, use W A S D to walk, and E to speak to a nearby ghost."
+                if (canvas.getAttribute("aria-label") !== locationLabel) canvas.setAttribute("aria-label", locationLabel)
+                if (scene.fog instanceof THREE.FogExp2) {
+                    scene.fog.density = THREE.MathUtils.lerp(currentLight.fog + .006 * reveal, .018, outside)
+                    scene.fog.color.copy(insideFog).lerp(outsideFog, outside)
+                }
+                scene.environmentIntensity = THREE.MathUtils.lerp(scene.environmentIntensity, .46, outside)
+                renderer.toneMappingExposure = THREE.MathUtils.lerp(currentLight.exposure, 1.12, outside)
                 witchMaterials.forEach(({ material, opacity, emission, eyes }) => {
                     material.opacity = opacity * apparition
                     if (eyes) material.emissiveIntensity = emission * (.35 + .45 * reveal) * apparition
@@ -768,6 +823,7 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
             spirits.forEach(spirit => { spirit.mixer.stopAllAction(); spirit.mixer.uncacheRoot(spirit.root) })
             if (door) { door.mixer.stopAllAction(); door.mixer.uncacheRoot(door.root) }
             if (witch) { witch.mixer.stopAllAction(); witch.mixer.uncacheRoot(witch.root) }
+            exterior?.dispose()
             disposeObject(scene)
             environment?.dispose()
             hdri?.dispose()
