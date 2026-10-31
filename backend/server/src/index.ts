@@ -326,7 +326,10 @@ async function serveWeb(pathname: string): Promise<Response | null> {
             return new Response(file, { headers: { "cache-control": cache } })
         }
     }
-    // Single-page app: unknown paths (e.g. /?game=…) get the app shell.
+    // A missing file (it has an extension, e.g. /x.css) is a real 404; serving the app shell
+    // instead would hide the mistake behind a "200" HTML page.
+    if (/\.[a-z0-9]{1,8}$/i.test(pathname)) return null
+    // Single-page app: unknown routes (e.g. /?game=…) get the app shell.
     return new Response(index, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } })
 }
 

@@ -421,3 +421,86 @@ select option { background: #18181b; color: var(--text); }
   .route-label { gap: 7px; }
   .route-actor { gap: 6px; }
 }
+
+/* ======================================================================
+   Theme layer: the game's palette + Moya 3D material (matches the title screen).
+   Solid-edge cards (2px border + solid bottom edge, no blur), pressable 3D buttons,
+   gold as the single accent, Cormorant Garamond for display, DM Sans for UI.
+   Overrides look only; layout and behaviour above are unchanged.
+   ====================================================================== */
+:root {
+  --bg: #101818; --panel: #17201f; --panel-raised: #1d2826; --panel-hover: #22302d;
+  --line: #2a3633; --line-bright: #3a4945; --text: #f2eee1; --muted: #b4b8af; --faint: #8f948b;
+  --silver: #e9e0c9; --candle: #c5a776; --gold: #c5a776; --cream: #e9e0c9;
+  --edge: #090d0d; --gold-edge: #8b7048; --chip: #c5a77624; --radius: 16px; --radius-sm: 12px;
+}
+body { background: var(--bg); color: var(--text); font-family: 'DM Sans', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+.flow-canvas svg text { font-family: 'DM Sans', system-ui, sans-serif; }
+
+/* Display type */
+h1 { font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 600; font-size: clamp(34px, 3.4vw, 48px); line-height: 1.05; letter-spacing: -.01em; color: var(--text); }
+.page-subtitle { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 20px; line-height: 1.35; color: var(--cream); }
+.panel h2, .panel-header h2 { font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 600; font-size: 24px; line-height: 1.2; letter-spacing: 0; color: var(--text); }
+.eyebrow, .page-head .eyebrow, .metric-label, .flow-column-label, .session-field > span { font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--gold); }
+.panel-subtitle, .metric-foot, .breakdown-item > span { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.metric-value, .metric-clock, .donut-value { font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); }
+
+/* Moya 3D solid-edge cards */
+.metric-card, .panel, .boot-message, .skeleton, .outcome-strip, .privacy-note {
+  background: var(--panel); border: 2px solid var(--line); border-radius: var(--radius); box-shadow: 0 5px 0 var(--edge);
+}
+.msg, .clue, .board-stat, .feed li, .flow-node rect { background: var(--panel-raised); border: 2px solid var(--line); border-radius: var(--radius-sm); box-shadow: 0 3px 0 var(--edge); }
+.flow-node rect { fill: var(--panel-raised); stroke: var(--line); stroke-width: 2px; }
+.msg.hl, .clue.active { border-color: var(--gold); box-shadow: 0 3px 0 var(--gold-edge); background: #232a22; }
+.msg:hover, .clue:hover { background: var(--panel-hover); }
+.timeline li.hl { background: #c5a7761a; }
+
+/* Pressable 3D buttons */
+.button-primary, #refresh, #scan-to-play {
+  background: var(--gold); color: #101818; border: 2px solid #d6bd92; border-radius: 12px; box-shadow: 0 4px 0 var(--gold-edge);
+  font: 600 14px/1 'DM Sans', sans-serif; min-height: 44px; padding: 0 16px; display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+  transition: transform 80ms ease, box-shadow 80ms ease;
+}
+.button-primary:hover { background: #cfb282; }
+.button-primary:active, #refresh:active, #scan-to-play:active, #sound-toggle:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--gold-edge); }
+#sound-toggle, .filter-button, .icon-button {
+  background: var(--panel-raised); color: var(--cream); border: 2px solid var(--line); border-radius: 12px; box-shadow: 0 4px 0 var(--edge);
+  font: 600 14px/1 'DM Sans', sans-serif; min-height: 44px; padding: 0 16px; display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+}
+#sound-toggle[aria-pressed="true"] { border-color: var(--gold); color: var(--gold); }
+.filter-button[aria-pressed="true"] { background: var(--gold); color: #101818; border-color: #d6bd92; box-shadow: 0 4px 0 var(--gold-edge); }
+.button-primary:focus-visible, #sound-toggle:focus-visible, #scan-to-play:focus-visible, .filter-button:focus-visible { outline: 2px solid var(--cream); outline-offset: 3px; }
+
+/* Navigation: one accent, no SaaS chrome */
+.topbar { border-bottom: 2px solid var(--line); }
+.topnav { background: var(--panel); border: 2px solid var(--line); box-shadow: 0 4px 0 var(--edge); }
+.topnav a { color: var(--muted); font-weight: 600; }
+.topnav a.active, .topnav a[aria-current="page"], .topnav a[aria-current="true"] { color: #101818; background: var(--gold); box-shadow: none; }
+.topbar-meta .workspace-avatar, .topbar-meta .readonly { display: none; }
+.brand-icon { background: var(--chip); border: 0; box-shadow: none; color: var(--gold); border-radius: 50%; }
+.brand > span:last-child { font-weight: 700; letter-spacing: .14em; color: var(--text); }
+.brand small { color: var(--gold); }
+.session-field select { background: var(--panel-raised); border: 2px solid var(--line); border-radius: 12px; color: var(--text); min-height: 44px; font: 500 14px 'DM Sans', sans-serif; }
+
+/* Badges and tags: gold tint, readable size */
+.badge, .tag { border: 0; border-radius: 999px; background: var(--chip); color: var(--gold); font-size: 11px; font-weight: 700; letter-spacing: .06em; padding: 4px 10px; }
+.badge.live, .badge.won, .tag.linked { background: #7bcbaa22; color: #9fd8bf; }
+.badge.locked, .tag.report, .msg.report .tag { background: var(--chip); color: var(--gold); }
+.status-dot, .footer-dot, .dot { background: var(--gold); box-shadow: none; }
+
+/* QR overlay (Scan to play) */
+.qr-overlay { position: fixed; inset: 0; background: #0a1010ee; display: grid; place-items: center; z-index: 50; padding: 24px; }
+.qr-card { background: var(--panel); border: 2px solid var(--line); border-radius: 20px; box-shadow: 0 6px 0 var(--edge); padding: 28px; text-align: center; max-width: 520px; width: 100%; }
+.qr-card h2 { font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 600; font-size: 36px; margin: 0 0 4px; color: var(--text); }
+.qr-card p { color: var(--muted); font-size: 14px; line-height: 1.5; margin: 6px 0; }
+.qr-card img { width: min(400px, 78vw); height: auto; border-radius: 12px; background: #fff; margin: 14px 0 10px; }
+.qr-card .qr-link { font: 600 14px/1.4 ui-monospace, Menlo, monospace; color: var(--gold); word-break: break-all; }
+/* Polish: one gold button per area, lining numerals, labels inside the rings */
+.page-actions #refresh.button-primary, .page-actions #refresh {
+  background: var(--panel-raised); color: var(--cream); border: 2px solid var(--line); box-shadow: 0 4px 0 var(--edge);
+}
+.page-actions #refresh:hover { background: var(--panel-hover); }
+.page-actions #refresh:active { box-shadow: 0 1px 0 var(--edge); }
+.metric-value, .metric-clock, .donut-value, .board-stat strong { font-variant-numeric: lining-nums tabular-nums; }
+.donut-wrap > .donut-label, .donut-label { font-size: 10px; line-height: 1.2; max-width: 62px; margin-inline: auto; text-align: center; white-space: normal; }
+.donut-wrap > .donut-label { left: 50%; width: 54px; max-width: 54px; transform: translateX(-50%); font-size: 9.5px; }

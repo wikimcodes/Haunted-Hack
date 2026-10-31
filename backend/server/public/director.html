@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#090909">
   <title>Director View — The Spy Monster</title>
-  <style>body{margin:0;background:#090909;color:#ededed;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.boot-message{padding:40px;color:#a0a0a5}svg{max-width:100%}</style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap">
+  <style>body{margin:0;background:#101818;color:#f2eee1;font-family:"DM Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.boot-message{padding:40px;color:#a0a0a5}svg{max-width:100%}</style>
   <script>
     const directorPrefix = location.pathname.replace(/\/director\/?$/, "").replace(/\/$/, "")
     const directorStyle = document.createElement("link")
@@ -20,7 +22,7 @@
     <header class="topbar">
       <a class="brand" href="#overview" aria-label="The Spy Monster, Director overview">
         <span class="brand-icon" aria-hidden="true"><svg width="31" height="31" viewBox="0 0 32 32" fill="none"><path d="M7 24V8l9 10V8l9 16V8" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/><path d="m7 24 9-6 9 6" stroke="currentColor" stroke-width="1.1" opacity=".45"/></svg></span>
-        <span>SPY MONSTER<small>DIRECTOR WORKSPACE</small></span>
+        <span>SPY MONSTER<small>DIRECTOR VIEW</small></span>
       </a>
       <nav class="topnav" aria-label="Director sections">
         <a href="#overview" data-view="overview" aria-current="page">Overview</a>
@@ -31,9 +33,11 @@
     </header>
 
     <section class="page-head" aria-label="Investigation controls">
-      <div class="heading-block"><p class="eyebrow">THE FORGOTTEN LIBRARY / DIRECTOR VIEW</p><h1>Investigation overview</h1><p class="page-subtitle">Every whisper leaves a trace.</p></div>
+      <div class="heading-block"><p class="eyebrow">THE FORGOTTEN LIBRARY</p><h1>Behind the betrayal</h1><p class="page-subtitle">Every whisper leaves a trace.</p></div>
       <div class="page-actions">
         <label class="session-field"><span>Session</span><select id="picker" aria-label="Game"><option>Loading sessions…</option></select></label>
+        <button id="sound-toggle" type="button" aria-pressed="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v4h4l5 4V6L8 10zM16 9a4 4 0 0 1 0 6"/></svg><span>Sound off</span></button>
+        <button id="scan-to-play" type="button"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 18h2v2h-2zM14 18h2v2h-2zM18 14h2v2h-2z"/></svg><span>Scan to play</span></button>
         <button id="refresh" class="button button-primary" type="button"><svg width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M16.3 7A6.5 6.5 0 1 0 16 14M16.5 3.5V7H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Refresh</span></button>
         <span id="connection" class="badge connection" role="status">Connecting</span>
       </div>
@@ -54,6 +58,78 @@
       document.getElementById("root").replaceChildren(message)
     }
     document.body.append(directorScript)
+  </script>
+  <script>
+    // Scan to play + the witch's voice. Self-contained so the dashboard module stays unchanged.
+    (() => {
+      const prefix = location.pathname.replace(/\/director\/?$/, "").replace(/\/$/, "")
+      const api = path => `${prefix}${path}`
+
+      document.getElementById("scan-to-play").addEventListener("click", () => {
+        const gameUrl = `${location.origin}${prefix}/`
+        const local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)
+        const overlay = document.createElement("div")
+        overlay.className = "qr-overlay"
+        overlay.setAttribute("role", "dialog")
+        overlay.setAttribute("aria-label", "Scan to play")
+        const card = document.createElement("div")
+        card.className = "qr-card"
+        const h = document.createElement("h2"); h.textContent = "Scan to play"
+        const sub = document.createElement("p"); sub.textContent = "Find the spy before dawn."
+        card.append(h, sub)
+        if (local) {
+          const hint = document.createElement("p")
+          hint.textContent = "This page is open on localhost, which phones can't reach. Open the Director View through the public link (…/director) and the QR code will point there."
+          card.append(hint)
+        } else {
+          const img = document.createElement("img")
+          img.src = api(`/api/qr?url=${encodeURIComponent(gameUrl)}`)
+          img.alt = `QR code for ${gameUrl}`
+          card.append(img)
+        }
+        const link = document.createElement("p"); link.className = "qr-link"; link.textContent = gameUrl
+        const close = document.createElement("p"); close.textContent = "Click anywhere to close"
+        card.append(link, close)
+        overlay.append(card)
+        const dismiss = () => { overlay.remove(); document.removeEventListener("keydown", onKey) }
+        const onKey = e => { if (e.key === "Escape") dismiss() }
+        overlay.addEventListener("click", dismiss)
+        document.addEventListener("keydown", onKey)
+        document.body.append(overlay)
+      })
+
+      // The witch reads each new clue aloud once sound is on (the click unlocks audio).
+      const btn = document.getElementById("sound-toggle")
+      const player = new Audio()
+      const queue = []
+      let on = false, game = null, spoken = new Set()
+      const next = () => { const url = queue.shift(); if (!url) return; player.src = url; player.play().catch(next) }
+      player.addEventListener("ended", next)
+      player.addEventListener("error", next)
+      btn.addEventListener("click", () => {
+        on = !on
+        btn.setAttribute("aria-pressed", String(on))
+        btn.querySelector("span").textContent = on ? "Sound on" : "Sound off"
+        if (on && player.paused) { player.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="; player.play().catch(() => {}) }
+      })
+      setInterval(async () => {
+        const id = new URLSearchParams(location.search).get("game") || document.getElementById("picker")?.value
+        if (!id || id.startsWith("Loading")) return
+        try {
+          const res = await fetch(api(`/api/game/${encodeURIComponent(id)}`))
+          if (!res.ok) return
+          const state = await res.json()
+          if (game !== state.sessionId) { game = state.sessionId; spoken = new Set(state.clues.map(c => c.id)); return }
+          for (const clue of state.clues) {
+            if (spoken.has(clue.id)) continue
+            spoken.add(clue.id)
+            if (!on) continue
+            queue.push(api(`/api/game/${encodeURIComponent(state.sessionId)}/voice/${encodeURIComponent(clue.id)}`))
+            if (player.paused || player.src.startsWith("data:")) next()
+          }
+        } catch {}
+      }, 2000)
+    })()
   </script>
 </body>
 </html>
