@@ -1,0 +1,19 @@
+{
+  "name": "spy-monster-game-client",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p .",
+    "test:live": "bun test/live.ts"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/react": "^19.0.0",
+    "react": "^19.0.0",
+    "typescript": "~5.9.3"
+  }
+}
