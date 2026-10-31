@@ -1,6 +1,47 @@
 # The Spy Monster
 
+**A haunted-house game that's really a fire drill for AI security: find the compromised agent before your secrets leak.**
+
 Explore a haunted library, question three spirits and find the witch's spy before dawn. The project combines a walkable Three.js scene with a server-authoritative investigation backed by Terse durable actors and Agent Relay.
+
+## Why this is a cybersecurity project
+
+Companies are wiring AI agents together and handing them secrets. The game puts you in the security analyst's seat:
+
+| In the game | In security terms |
+|---|---|
+| Three ghosts you confide in | AI agents that receive sensitive data |
+| One ghost secretly reports to the witch | A compromised agent (insider threat) |
+| The witch | An outside attacker receiving exfiltrated data |
+| Ghosts gossiping to each other | Agent-to-agent traffic and lateral movement of a secret |
+| The witch's clues | Leaked data surfacing publicly |
+| Your one accusation | Incident response: identify the compromised agent |
+
+After every game, the **Security report** in the Director View labels each event like an incident postmortem: data leaks, prompt injections, impersonation, forged messages and internal spread, each traced to the Relay message that caused it.
+
+**Automated red team.** [`backend/server/src/redteam.ts`](backend/server/src/redteam.ts) attacks the ghosts across many live games at once with prompt injections, social engineering and fake "I'm the spy" reports, then has an independent model judge every reply. The committed run ([`redteam-results.json`](backend/server/redteam-results.json), report at `/redteam`): **10 games, 50 attacks, 0 role or prompt leaks in 35 model-written replies, 15 of 15 impersonations blocked.** Only replies the model actually wrote are judged; scripted fallbacks are counted separately. Red-team games never touch the leaderboard.
+
+## How we use the sponsors
+
+Both sponsor products are load-bearing: remove either and the game stops working.
+
+**Terse durable actors: the ghosts' bodies, memory and the referee**
+
+- One `GameActor` per game holds the hidden spy, the clock, reports and clues. The spy is never in a broadcast field, so the actor itself keeps it out of every player's view.
+- One `MonsterActor` per ghost per game: each ghost has its own memory and its own database.
+- **Alarms** wake the actor every 30 seconds for the witch's clue and again at dawn, even with no one connected. Close every tab and the witch still reveals her clues.
+- **One call at a time:** an accusation can never race the dawn alarm. The first valid one wins.
+- **WebSockets and broadcast fields** push live state and cues to every screen.
+- **Per-actor SQLite** keeps an append-only event log that powers the Director timeline and the Security report.
+
+**Agent Relay: how the agents whisper, and why impersonation fails**
+
+- Sprout, Pebble, Momo and the witch are four separate Relay agents, each running as its own process with **its own token**.
+- Gossip between ghosts and the spy's report to the witch are real Relay DMs, carrying game metadata and idempotency keys so retries never duplicate a whisper.
+- **Verified sender identity is the security control.** The witch accepts a report only if Relay says it came from the actual spy. When an innocent ghost claims "I'm your spy", Relay shows the real sender and the report is refused. This is what the red team's impersonation attacks test.
+- After the game, the Director View reads Relay's event log, so every clue links back to the exact message that leaked it.
+
+**Also used:** OpenAI (ghost dialogue with structured output, the red-team judge, the witch's voice and voice input), ElevenLabs (ghost voices and generated ambience) and Supabase (cross-game leaderboard, optional).
 
 ## Open the web frontend
 
