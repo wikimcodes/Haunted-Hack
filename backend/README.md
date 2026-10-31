@@ -118,7 +118,7 @@ Point the frontend's `apiUrl` at the laptop's address (`ipconfig getifaddr en0`,
 
 ## Deploying
 
-`terse deploy` (from `actor/`, needs `terse auth login`) hosts the actors. Then set `TERSE_ACTOR_URL` and `TERSE_API_KEY` in `server/.env` and rerun `terse actor generate`. The server and agents can run on any host with Bun.
+`terse deploy` (from `actor/`, needs `terse auth login`) hosts the actors. Then set `TERSE_ACTOR_URL` and `TERSE_API_KEY` in `server/.env` and rerun `terse actor generate`. The server and agents can run on any host with Bun; `server/Dockerfile` runs both in one container. See [DEPLOY.md](../DEPLOY.md) for Railway (backend) plus Vercel (website).
 
 ## Known limits
 

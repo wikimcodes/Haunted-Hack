@@ -23,6 +23,7 @@ In Explore mode, open the menu and choose **Preview the witch’s reveal** to se
 |---|---|
 | [frontend-game/](frontend-game/README.md) | React/TypeScript UI, first-person Three.js renderer, collisions and HTTP/WebSocket client |
 | [backend/](backend/README.md) | Terse actors, Bun API and independent Relay agents |
+| [DEPLOY.md](DEPLOY.md) | Hosting: backend on Railway, website on Vercel |
 | [ENV.md](ENV.md) | Every environment variable for the backend, frontend and tests |
 | [docs/ASSETS.md](docs/ASSETS.md) | GLB pipeline, materials and texture credits |
 | [PRD.md](PRD.md) | Product requirements and game design |

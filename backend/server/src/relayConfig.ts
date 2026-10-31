@@ -25,8 +25,11 @@ export const LOCAL_RELAY_URL = process.env.RELAY_LOCAL_URL ?? "http://localhost:
 const CONFIG_PATH = fileURLToPath(new URL(RELAY_LOCAL ? "../.relay.local.json" : "../.relay.json", import.meta.url))
 
 export async function loadRelayConfig(): Promise<RelayConfig> {
+    // Hosts without a persistent disk (Railway, Fly, ...) pass the contents of .relay.json as an env var.
+    const fromEnv = process.env.RELAY_CONFIG_JSON?.trim()
+    if (fromEnv) return JSON.parse(fromEnv) as RelayConfig
     const file = Bun.file(CONFIG_PATH)
-    if (!(await file.exists())) throw new Error("Missing backend/server/.relay.json. Run `bun run setup:relay` first.")
+    if (!(await file.exists())) throw new Error("Missing backend/server/.relay.json. Run `bun run setup:relay` first, or set RELAY_CONFIG_JSON.")
     return (await file.json()) as RelayConfig
 }
 

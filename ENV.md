@@ -27,6 +27,7 @@ Or run `zsh backend/set-keys.sh` once. It asks for the OpenAI and Terse keys wit
 | `TERSE_ACTOR_URL` | local dev server | Deployed Terse actors, e.g. `https://api.useterse.ai/<project-id>/actors`. Leave unset for local `terse actor dev`. |
 | `TERSE_API_KEY` | none | Required together with `TERSE_ACTOR_URL`. |
 | `TERSE_ACTOR_SETUP_TIMEOUT_MS` | SDK default | Optional grant-request timeout for the generated Terse client (1000–600000). |
+| `RELAY_CONFIG_JSON` | none | Contents of `.relay.json`, for hosts without a persistent disk (see `DEPLOY.md`). It takes precedence over the file. |
 | `RELAY_MODE` | hosted | `local` points setup, the server and agents at a self-hosted Relay engine instead of hosted Agent Relay. |
 | `RELAY_LOCAL_URL` | `http://localhost:8787` | Address of that local engine. |
 | `WITCH_VOICE` | `fable` | OpenAI text-to-speech voice for spoken clues. |
