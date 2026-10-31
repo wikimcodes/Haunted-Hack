@@ -63,6 +63,9 @@ function Modal({ title, label, children, close }: { title: string; label: string
   </div></div>
 }
 
+// ?demo in the URL runs a short round for live demos: 90 seconds, a witch clue every 30 seconds.
+const DEMO_MODE = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('demo')
+
 type Board = {
   totals: { games: number; escape_rate_pct: number | null; fastest_catch_seconds: number | null; total_whispers: number } | null
   monsters: { monster: MonsterId; times_spy: number; got_away_pct: number | null }[]
@@ -169,7 +172,7 @@ export default function App() {
     if (busy) return
     enableSound()
     setBusy(true); setError(null)
-    try { await game.start(); setDismissedResult(false); setMode('game'); setSelected(null); setPaused(false); setJournal(false) }
+    try { await game.start(DEMO_MODE ? { gameSeconds: 90, revealSeconds: 30 } : undefined); setDismissedResult(false); setMode('game'); setSelected(null); setPaused(false); setJournal(false) }
     catch { setError('The game server is unavailable. You can still explore the library, or try again when it is online.') }
     finally { setBusy(false) }
   }
@@ -241,7 +244,7 @@ export default function App() {
         <div className="intro-actions">
           {game.state?.phase === 'playing'
             ? <button className="btn3d btn3d-primary" disabled={!ready} onClick={resumeGame}>Resume investigation <span className="btn3d-time">{time(game.secondsLeft)}</span></button>
-            : <button className="btn3d btn3d-primary" disabled={!ready || busy || !!sceneError} onClick={startGame}>{busy ? 'Connecting…' : ready ? 'Begin investigation' : 'Opening the library…'}<span className="btn3d-time">3:00</span></button>}
+            : <button className="btn3d btn3d-primary" disabled={!ready || busy || !!sceneError} onClick={startGame}>{busy ? 'Connecting…' : ready ? 'Begin investigation' : 'Opening the library…'}<span className="btn3d-time">{DEMO_MODE ? '1:30' : '3:00'}</span></button>}
           <button className="btn3d btn3d-secondary" onClick={() => setBoardOpen(true)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 20V11M12 20V5M18 20v-6" /></svg>Leaderboard</button>
         </div>
         <p className="intro-sound"><span className="icon-chip small" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6L8 10zM16 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12" /></svg></span>{soundMuted ? 'Sound is muted. Turn it on: the witch speaks.' : 'Turn your sound on. The witch speaks.'}</p>

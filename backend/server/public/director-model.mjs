@@ -51,7 +51,7 @@ export function completedModel(view) {
     try { const parsed = JSON.parse(e.detail || '{}'); if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) detail = parsed } catch {}
     return { seq: e.seq, type: String(e.type || 'Event'), at: number(e.at), detail }
   })
-  return { locked: false, pub, messages, spyId: view.spyId, facts: list(view.facts), evidence: list(view.evidence), events,
+  return { locked: false, pub, messages, spyId: view.spyId, facts: list(view.facts), evidence: list(view.evidence), events, security: view.security || null,
     accusation: view.public.accusation, workspace: view.relay?.workspace || null, relayAvailable: true,
     relayTotal: new Set(messages.map(m => m.id)).size,
     breakdown: [{ label: 'Gossip', value: messages.filter(m => m.kind === 'gossip').length, color: '#dddddf' }, { label: 'Reports', value: messages.filter(m => m.kind === 'report').length, color: '#9c99ad' }, { label: 'Rejected', value: messages.filter(m => m.kind === 'rejected').length, color: '#5c5b61' }],

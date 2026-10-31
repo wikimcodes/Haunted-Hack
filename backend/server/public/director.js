@@ -254,6 +254,33 @@ function actorIdentity(id, label = nameOf(id)) {
   return el('span', { class: 'route-actor' }, image, el('span', {}, label))
 }
 
+// Postmortem: every security-relevant event of the game, labelled like an incident report.
+// The spy is a compromised agent, the witch an outside party, gossip is agent-to-agent traffic.
+function securityPanel(model) {
+  if (model.locked || !model.security) return null
+  const { summary, incidents } = model.security
+  const stat = (label, value, tone = '') => el('div', { class: `sec-stat ${tone}` }, el('span', {}, label), el('strong', {}, String(value)))
+  const stats = el('div', { class: 'sec-stats' },
+    stat('Data leaks', summary.leaks, summary.leaks ? 'high' : ''),
+    stat('Made public', summary.leaksMadePublic),
+    stat('Injections contained', summary.injections, summary.injections ? 'medium' : ''),
+    stat('Attacks blocked', summary.blocked, summary.blocked ? 'ok' : ''),
+    stat('Traced to source', summary.leaks ? (summary.tracedToSource ? 'Yes' : 'Partly') : '-'))
+  const list = incidents.length ? el('ol', { class: 'incident-list' }, incidents.map(i => el('li', { class: `incident sev-${i.severity}` },
+    el('div', { class: 'incident-head' },
+      el('span', { class: `sev-chip sev-${i.severity}` }, i.severity === 'info' ? 'Info' : `${i.severity[0].toUpperCase()}${i.severity.slice(1)}`),
+      el('span', { class: 'incident-label' }, i.label),
+      el('span', { class: `incident-outcome out-${i.outcome.toLowerCase()}` }, i.outcome),
+      i.at === null ? null : el('span', { class: 'incident-time' }, `+${clockOf(i.at)}`)),
+    el('p', { class: 'incident-title' }, i.title),
+    el('p', { class: 'incident-detail' }, i.detail),
+    i.relayMessageId ? el('p', { class: 'incident-evidence' }, `Evidence: Agent Relay message ${i.relayMessageId}`) : null)))
+    : empty('No incidents', 'Nothing security-relevant happened in this game.', 'pulse')
+  return el('section', { class: 'panel security-panel', id: 'security' },
+    panelHeader('Security report', 'Every leak, attack and spread in this game, labelled for the postmortem.', badge(`${incidents.length} incidents`)),
+    stats, list)
+}
+
 function render(model) {
   renderedModel = model
   const flow = el('section', { class: 'panel flow-panel', id: 'flow' },
@@ -308,7 +335,7 @@ function render(model) {
   }
   populateMessages()
   const footer = el('div', { class: 'footer' }, el('span', {}, el('i', { class: 'footer-dot' }), 'Agent Relay carries the whispers. Terse keeps the record.'), el('span', {}, model.pub.sessionId))
-  const dashboard = el('div', { class: 'dashboard', id: 'overview' }, metricGrid(model), privacy, flow, el('div', { class: 'lower-grid' }, messagesPanel, cluesPanel, timelinePanel), footer)
+  const dashboard = el('div', { class: 'dashboard', id: 'overview' }, metricGrid(model), privacy, securityPanel(model), flow, el('div', { class: 'lower-grid' }, messagesPanel, cluesPanel, timelinePanel), footer)
   root.replaceChildren(dashboard)
   void leaderboardPanel().then(panel => { if (panel && dashboard.isConnected) dashboard.insertBefore(panel.cloneNode(true), footer) })
   if (selectedClue && !clueNodes.has(selectedClue)) selectedClue = null

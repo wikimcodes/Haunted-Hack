@@ -8,6 +8,7 @@ import QRCode from "qrcode"
 
 import { actors } from "../generated/index.js"
 import { archiveGame, leaderboard, startArchiver } from "./archive"
+import { securityReport } from "./incidents"
 import { canTranscribe, monsterReply, speech, transcribe, voiceProvider, type Speaker } from "./llm"
 import { connectAgent, loadRelayConfig, withRelayRetry } from "./relayConfig"
 import { MONSTER_IDS, MONSTER_NAMES, isMonsterId, type MonsterId, type RelayMeta } from "./types"
@@ -189,7 +190,9 @@ async function director(sessionId: string) {
             }
         })
     )
-    return json({ ...view, relay: { workspace: relayConfig.workspaceName, messages: relayMessages } })
+    // Postmortem: every security-relevant event, labelled (leak, injection, impersonation, ...).
+    const security = securityReport(view as unknown as Parameters<typeof securityReport>[0], view.public.startedAt)
+    return json({ ...view, security, relay: { workspace: relayConfig.workspaceName, messages: relayMessages } })
 }
 
 // Spoken lines: the witch reads each revealed clue, and each ghost speaks its own replies.
