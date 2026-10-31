@@ -37,6 +37,10 @@ export class GameConnection {
 
     #witchVoice: boolean
     #spokenClues: Set<string> | null = null
+    // One reusable player, unlocked during a tap. Phones (iOS especially) block audio that a tap
+    // didn't start, so clue audio arriving later from the server plays through this element.
+    #player: HTMLAudioElement | null = null
+    #voiceQueue: string[] = []
 
     constructor(apiUrl: string, options: { witchVoice?: boolean } = {}) {
         this.#witchVoice = options.witchVoice ?? true
@@ -71,6 +75,7 @@ export class GameConnection {
 
     /** Starts a new game and connects to it. */
     async start(options?: { gameSeconds?: number; revealSeconds?: number }): Promise<PublicGameState> {
+        this.unlockAudio()
         const generation = this.#beginSession()
         const state = await this.api.start(options)
         if (!this.#isCurrent(generation)) throw new DOMException("Game connection was closed or replaced", "AbortError")
@@ -106,6 +111,7 @@ export class GameConnection {
      * a second message to a monster that is still replying is refused (returns false, sets error).
      */
     async chat(monsterId: MonsterId, message: string): Promise<boolean> {
+        this.unlockAudio()
         const sessionId = this.#sessionId
         const generation = this.#generation
         if (this.#closed || !sessionId) return false
@@ -133,6 +139,7 @@ export class GameConnection {
     }
 
     async accuse(monsterId: MonsterId): Promise<PublicGameState | null> {
+        this.unlockAudio()
         const sessionId = this.#sessionId
         const generation = this.#generation
         if (this.#closed || !sessionId) return null
@@ -251,11 +258,46 @@ export class GameConnection {
         for (const clue of state.clues) {
             if (this.#spokenClues.has(clue.id)) continue
             this.#spokenClues.add(clue.id)
-            if (this.#witchVoice && typeof Audio !== "undefined") {
-                // Browsers only allow sound after the player has tapped something; starting the game counts.
-                void new Audio(this.api.voiceUrl(state.sessionId, clue.id)).play().catch(() => {})
-            }
+            if (this.#witchVoice) this.#enqueueVoice(this.api.voiceUrl(state.sessionId, clue.id))
         }
+    }
+
+    /**
+     * Call from a tap or click handler (start, chat and accuse already do). Plays a silent clip on the
+     * shared player so the browser lets it play the witch's clues later without another tap.
+     */
+    unlockAudio(): void {
+        if (typeof Audio === "undefined") return
+        if (!this.#player) {
+            this.#player = new Audio()
+            this.#player.preload = "auto"
+            this.#player.addEventListener("ended", () => this.#playNextVoice())
+            this.#player.addEventListener("error", () => this.#playNextVoice())
+        }
+        if (this.#player.src && !this.#player.paused) return
+        this.#player.src = SILENT_WAV
+        void this.#player.play().catch(() => {})
+    }
+
+    #enqueueVoice(url: string): void {
+        if (typeof Audio === "undefined") return
+        this.#voiceQueue.push(url)
+        const player = this.#player
+        // Nothing playing (or only the silent unlock clip): start now. Otherwise "ended" picks it up.
+        if (!player || player.paused || player.src === SILENT_WAV) this.#playNextVoice()
+    }
+
+    #playNextVoice(): void {
+        const url = this.#voiceQueue.shift()
+        if (!url) return
+        if (!this.#player) {
+            // Never unlocked by a tap: try anyway (works on desktop browsers after any click).
+            void new Audio(url).play().catch(() => {})
+            this.#playNextVoice()
+            return
+        }
+        this.#player.src = url
+        void this.#player.play().catch(() => this.#playNextVoice())
     }
 
     #receive(raw: string): void {
@@ -316,3 +358,6 @@ export class GameConnection {
         }
     }
 }
+
+/** 0.0s of silence, used to unlock the audio player during a tap. */
+const SILENT_WAV = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="
