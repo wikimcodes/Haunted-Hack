@@ -1,0 +1,398 @@
+{
+  "scene": "Cinematic_Library",
+  "note": "Y-up. Blender light energy values are source values, not directly interchangeable with browser intensity. Match exposure and light model in runtime. Volume and post processing require separate implementation.",
+  "lights": [
+    {
+      "name": "Practical | shelf candle 0",
+      "type": "POINT",
+      "position": [
+        -2.48,
+        1.940179,
+        3.5
+      ],
+      "direction": [
+        0.0,
+        -1.0,
+        -0.0
+      ],
+      "blenderPowerWatts": 18.303,
+      "colorLinear": [
+        1.0,
+        0.5199999809265137,
+        0.2199999988079071
+      ],
+      "sizeMeters": null,
+      "shadowSoftSize": 0.03500000014901161
+    },
+    {
+      "name": "Practical | shelf candle 1",
+      "type": "POINT",
+      "position": [
+        -2.48,
+        4.969241,
+        2.9
+      ],
+      "direction": [
+        0.0,
+        -1.0,
+        -0.0
+      ],
+      "blenderPowerWatts": 20.845,
+      "colorLinear": [
+        1.0,
+        0.5199999809265137,
+        0.2199999988079071
+      ],
+      "sizeMeters": null,
+      "shadowSoftSize": 0.03500000014901161
+    },
+    {
+      "name": "Practical | shelf candle 2",
+      "type": "POINT",
+      "position": [
+        -2.48,
+        3.114159,
+        1.4
+      ],
+      "direction": [
+        0.0,
+        -1.0,
+        -0.0
+      ],
+      "blenderPowerWatts": 18.871,
+      "colorLinear": [
+        1.0,
+        0.5199999809265137,
+        0.2199999988079071
+      ],
+      "sizeMeters": null,
+      "shadowSoftSize": 0.03500000014901161
+    },
+    {
+      "name": "Practical | shelf candle 3",
+      "type": "POINT",
+      "position": [
+        -2.48,
+        4.949641,
+        -0.75
+      ],
+      "direction": [
+        0.0,
+        -1.0,
+        -0.0
+      ],
+      "blenderPowerWatts": 15.386,
+      "colorLinear": [
+        1.0,
+        0.5199999809265137,
+        0.2199999988079071
+      ],
+      "sizeMeters": null,
+      "shadowSoftSize": 0.03500000014901161
+    },
+    {
+      "name": "Practical | shelf candle 4",
+      "type": "POINT",
+      "position": [
+        -2.48,
+        3.106045,
+        -2.75
+      ],
+      "direction": [
+        0.0,
+        -1.0,
+        -0.0
+      ],
+      "blenderPowerWatts": 20.285,
+      "colorLinear": [
+        1.0,
+        0.5199999809265137,
+        0.2199999988079071
+      ],
+      "sizeMeters": null,
+      "shadowSoftSize": 0.03500000014901161
+    },
+    {
+      "name": "Practical | shelf candle 5",
+      "type": "POINT",
+      "position": [
+        -2.48,
+        1.960844,
+        -4.9
+      ],
+      "direction": [
+        0.0,
+        -1.0,
+        -0.0
+      ],
+      "blenderPowerWatts": 16.776,
+      "colorLinear": [
+        1.0,
+        0.5199999809265137,
+        0.2199999988079071
+      ],
+      "sizeMeters": null,
+      "shadowSoftSize": 0.03500000014901161
+    },
+    {
+      "name": "Practical | reading counter candle 0",
+      "type": "POINT",
+      "position": [
+        -2.21,
+        1.1875,
+        3.75
+      ],
+      "direction": [
+        0.0,
+        -1.0,
+        -0.0
+      ],
+      "blenderPowerWatts": 18.0,
+      "colorLinear": [
+        1.0,
+        0.5199999809265137,
+        0.2199999988079071
+      ],
+      "sizeMeters": null,
+      "shadowSoftSize": 0.03500000014901161
+    },
+    {
+      "name": "Practical | reading counter candle 1",
+      "type": "POINT",
+      "position": [
+        -2.21,
+        1.3575,
+        -0.12
+      ],
+      "direction": [
+        0.0,
+        -1.0,
+        -0.0
+      ],
+      "blenderPowerWatts": 26.0,
+      "colorLinear": [
+        1.0,
+        0.5199999809265137,
+        0.2199999988079071
+      ],
+      "sizeMeters": null,
+      "shadowSoftSize": 0.03500000014901161
+    },
+    {
+      "name": "Practical | reading counter candle 2",
+      "type": "POINT",
+      "position": [
+        -2.21,
+        1.2575,
+        -4.5
+      ],
+      "direction": [
+        0.0,
+        -1.0,
+        -0.0
+      ],
+      "blenderPowerWatts": 18.0,
+      "colorLinear": [
+        1.0,
+        0.5199999809265137,
+        0.2199999988079071
+      ],
+      "sizeMeters": null,
+      "shadowSoftSize": 0.03500000014901161
+    },
+    {
+      "name": "Practical | right foreground candle",
+      "type": "POINT",
+      "position": [
+        1.42,
+        1.3575,
+        -2.2
+      ],
+      "direction": [
+        0.0,
+        -1.0,
+        -0.0
+      ],
+      "blenderPowerWatts": 28.0,
+      "colorLinear": [
+        1.0,
+        0.5199999809265137,
+        0.2199999988079071
+      ],
+      "sizeMeters": null,
+      "shadowSoftSize": 0.03500000014901161
+    },
+    {
+      "name": "Practical | lantern candle",
+      "type": "POINT",
+      "position": [
+        -2.22,
+        1.3075,
+        0.1
+      ],
+      "direction": [
+        0.0,
+        -1.0,
+        -0.0
+      ],
+      "blenderPowerWatts": 28.0,
+      "colorLinear": [
+        1.0,
+        0.5199999809265137,
+        0.2199999988079071
+      ],
+      "sizeMeters": null,
+      "shadowSoftSize": 0.03500000014901161
+    },
+    {
+      "name": "Cinema | tall window daylight",
+      "type": "AREA",
+      "position": [
+        0.7,
+        4.6,
+        -8.7
+      ],
+      "direction": [
+        -0.197383,
+        -0.343275,
+        0.91826
+      ],
+      "blenderPowerWatts": 1500.0,
+      "colorLinear": [
+        0.3799999952316284,
+        0.75,
+        1.0
+      ],
+      "sizeMeters": 2.799999952316284,
+      "shadowSoftSize": 0.0
+    },
+    {
+      "name": "Cinema | soft window wrap",
+      "type": "AREA",
+      "position": [
+        1.8,
+        5.0,
+        -5.6
+      ],
+      "direction": [
+        -0.458119,
+        -0.687178,
+        0.563838
+      ],
+      "blenderPowerWatts": 180.0,
+      "colorLinear": [
+        0.4399999976158142,
+        0.800000011920929,
+        1.0
+      ],
+      "sizeMeters": 3.0,
+      "shadowSoftSize": 0.0
+    },
+    {
+      "name": "Cinema | warm candle bounce left",
+      "type": "AREA",
+      "position": [
+        -2.7,
+        1.65,
+        1.4
+      ],
+      "direction": [
+        -0.294949,
+        0.231746,
+        -0.926984
+      ],
+      "blenderPowerWatts": 48.0,
+      "colorLinear": [
+        1.0,
+        0.30000001192092896,
+        0.06499999761581421
+      ],
+      "sizeMeters": 2.5999999046325684,
+      "shadowSoftSize": 0.0
+    },
+    {
+      "name": "Cinema | warm mid shelf bounce",
+      "type": "AREA",
+      "position": [
+        -2.85,
+        2.6,
+        -2.5
+      ],
+      "direction": [
+        -0.43189,
+        0.43189,
+        -0.791797
+      ],
+      "blenderPowerWatts": 38.0,
+      "colorLinear": [
+        1.0,
+        0.3799999952316284,
+        0.10999999940395355
+      ],
+      "sizeMeters": 2.0999999046325684,
+      "shadowSoftSize": 0.0
+    },
+    {
+      "name": "Cinema | subdued front fill",
+      "type": "AREA",
+      "position": [
+        1.0,
+        4.3,
+        3.7
+      ],
+      "direction": [
+        -0.138489,
+        -0.346222,
+        -0.927875
+      ],
+      "blenderPowerWatts": 90.0,
+      "colorLinear": [
+        0.550000011920929,
+        0.699999988079071,
+        0.7799999713897705
+      ],
+      "sizeMeters": 4.0,
+      "shadowSoftSize": 0.0
+    },
+    {
+      "name": "Cinema | cool bounce onto shrouds",
+      "type": "AREA",
+      "position": [
+        -0.1,
+        4.0,
+        -1.1
+      ],
+      "direction": [
+        0.13805,
+        -0.506182,
+        -0.851306
+      ],
+      "blenderPowerWatts": 55.0,
+      "colorLinear": [
+        0.3400000035762787,
+        0.7300000190734863,
+        1.0
+      ],
+      "sizeMeters": 3.0,
+      "shadowSoftSize": 0.0
+    }
+  ],
+  "hdri": {
+    "file": "forest.hdr",
+    "strength": 0.18,
+    "rotationDegrees": 25
+  },
+  "toneMapping": {
+    "viewTransform": "AgX",
+    "look": "AgX - Medium High Contrast",
+    "exposure": -0.20000000298023224
+  },
+  "cameraDOF": {
+    "apertureFstop": 3.200000047683716,
+    "focusObjectPosition": [
+      -2.5,
+      2.2,
+      -1.2
+    ]
+  }
+}

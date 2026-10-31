@@ -1,0 +1,320 @@
+{
+  "blenderVersion": "5.2.1 LTS",
+  "method": "Inspect cinematic hierarchy, exact GLB clips, RGBA cloth opacity, normal-map presence and real weights/hinge channels; reimport into isolated Blender scene; sample named motion nodes and every shape-key owner for every animation; verify 100-degree door hinge rotation.",
+  "assets": {
+    "sprout": {
+      "loaded": true,
+      "meshObjects": 3,
+      "triangles": 23456,
+      "glbAnimationChannels": {
+        "Idle": {
+          "weightChannels": 1,
+          "weightTargets": [
+            "Cinematic_Sprout_Shroud"
+          ],
+          "rotationTargets": [
+            "Spirit_Sprout_Motion"
+          ]
+        },
+        "Talk": {
+          "weightChannels": 1,
+          "weightTargets": [
+            "Cinematic_Sprout_Shroud"
+          ],
+          "rotationTargets": [
+            "Spirit_Sprout_Motion"
+          ]
+        },
+        "Think": {
+          "weightChannels": 1,
+          "weightTargets": [
+            "Cinematic_Sprout_Shroud"
+          ],
+          "rotationTargets": [
+            "Spirit_Sprout_Motion"
+          ]
+        },
+        "Accused": {
+          "weightChannels": 1,
+          "weightTargets": [
+            "Cinematic_Sprout_Shroud"
+          ],
+          "rotationTargets": [
+            "Spirit_Sprout_Motion"
+          ]
+        }
+      },
+      "materialChecks": {
+        "normalMappedMaterials": 1,
+        "rgbaMorphPrimitives": 2,
+        "minimumVertexAlpha": 0.0,
+        "maximumVertexAlpha": 1.0
+      },
+      "animationChecks": {
+        "Accused": {
+          "moves": true,
+          "sampledTransformDelta": 0.075,
+          "deforms": true,
+          "sampledShapeKeyDelta": 0.693393,
+          "sampledShapeKeyChannels": 2,
+          "shapeKeyDeltasByMeshData": {
+            "Cinematic_Sprout_Shroud_Mesh.001": 0.693393
+          }
+        },
+        "Idle": {
+          "moves": true,
+          "sampledTransformDelta": 0.065,
+          "deforms": true,
+          "sampledShapeKeyDelta": 0.77,
+          "sampledShapeKeyChannels": 2,
+          "shapeKeyDeltasByMeshData": {
+            "Cinematic_Sprout_Shroud_Mesh.001": 0.77
+          }
+        },
+        "Talk": {
+          "moves": true,
+          "sampledTransformDelta": 0.014999,
+          "deforms": true,
+          "sampledShapeKeyDelta": 0.38,
+          "sampledShapeKeyChannels": 2,
+          "shapeKeyDeltasByMeshData": {
+            "Cinematic_Sprout_Shroud_Mesh.001": 0.38
+          }
+        },
+        "Think": {
+          "moves": true,
+          "sampledTransformDelta": 0.034993,
+          "deforms": true,
+          "sampledShapeKeyDelta": 0.38,
+          "sampledShapeKeyChannels": 2,
+          "shapeKeyDeltasByMeshData": {
+            "Cinematic_Sprout_Shroud_Mesh.001": 0.38
+          }
+        }
+      }
+    },
+    "pebble": {
+      "loaded": true,
+      "meshObjects": 3,
+      "triangles": 23456,
+      "glbAnimationChannels": {
+        "Idle": {
+          "weightChannels": 1,
+          "weightTargets": [
+            "Cinematic_Pebble_Shroud"
+          ],
+          "rotationTargets": [
+            "Spirit_Pebble_Motion"
+          ]
+        },
+        "Talk": {
+          "weightChannels": 1,
+          "weightTargets": [
+            "Cinematic_Pebble_Shroud"
+          ],
+          "rotationTargets": [
+            "Spirit_Pebble_Motion"
+          ]
+        },
+        "Think": {
+          "weightChannels": 1,
+          "weightTargets": [
+            "Cinematic_Pebble_Shroud"
+          ],
+          "rotationTargets": [
+            "Spirit_Pebble_Motion"
+          ]
+        },
+        "Accused": {
+          "weightChannels": 1,
+          "weightTargets": [
+            "Cinematic_Pebble_Shroud"
+          ],
+          "rotationTargets": [
+            "Spirit_Pebble_Motion"
+          ]
+        }
+      },
+      "materialChecks": {
+        "normalMappedMaterials": 1,
+        "rgbaMorphPrimitives": 2,
+        "minimumVertexAlpha": 0.0,
+        "maximumVertexAlpha": 1.0
+      },
+      "animationChecks": {
+        "Accused": {
+          "moves": true,
+          "sampledTransformDelta": 0.075,
+          "deforms": true,
+          "sampledShapeKeyDelta": 0.693393,
+          "sampledShapeKeyChannels": 2,
+          "shapeKeyDeltasByMeshData": {
+            "Cinematic_Pebble_Shroud_Mesh.001": 0.693393
+          }
+        },
+        "Idle": {
+          "moves": true,
+          "sampledTransformDelta": 0.065,
+          "deforms": true,
+          "sampledShapeKeyDelta": 0.77,
+          "sampledShapeKeyChannels": 2,
+          "shapeKeyDeltasByMeshData": {
+            "Cinematic_Pebble_Shroud_Mesh.001": 0.77
+          }
+        },
+        "Talk": {
+          "moves": true,
+          "sampledTransformDelta": 0.014999,
+          "deforms": true,
+          "sampledShapeKeyDelta": 0.38,
+          "sampledShapeKeyChannels": 2,
+          "shapeKeyDeltasByMeshData": {
+            "Cinematic_Pebble_Shroud_Mesh.001": 0.38
+          }
+        },
+        "Think": {
+          "moves": true,
+          "sampledTransformDelta": 0.034993,
+          "deforms": true,
+          "sampledShapeKeyDelta": 0.38,
+          "sampledShapeKeyChannels": 2,
+          "shapeKeyDeltasByMeshData": {
+            "Cinematic_Pebble_Shroud_Mesh.001": 0.38
+          }
+        }
+      }
+    },
+    "momo": {
+      "loaded": true,
+      "meshObjects": 3,
+      "triangles": 23456,
+      "glbAnimationChannels": {
+        "Idle": {
+          "weightChannels": 1,
+          "weightTargets": [
+            "Cinematic_Momo_Shroud"
+          ],
+          "rotationTargets": [
+            "Spirit_Momo_Motion"
+          ]
+        },
+        "Talk": {
+          "weightChannels": 1,
+          "weightTargets": [
+            "Cinematic_Momo_Shroud"
+          ],
+          "rotationTargets": [
+            "Spirit_Momo_Motion"
+          ]
+        },
+        "Think": {
+          "weightChannels": 1,
+          "weightTargets": [
+            "Cinematic_Momo_Shroud"
+          ],
+          "rotationTargets": [
+            "Spirit_Momo_Motion"
+          ]
+        },
+        "Accused": {
+          "weightChannels": 1,
+          "weightTargets": [
+            "Cinematic_Momo_Shroud"
+          ],
+          "rotationTargets": [
+            "Spirit_Momo_Motion"
+          ]
+        }
+      },
+      "materialChecks": {
+        "normalMappedMaterials": 1,
+        "rgbaMorphPrimitives": 2,
+        "minimumVertexAlpha": 0.0,
+        "maximumVertexAlpha": 1.0
+      },
+      "animationChecks": {
+        "Accused": {
+          "moves": true,
+          "sampledTransformDelta": 0.075,
+          "deforms": true,
+          "sampledShapeKeyDelta": 0.693393,
+          "sampledShapeKeyChannels": 2,
+          "shapeKeyDeltasByMeshData": {
+            "Cinematic_Momo_Shroud_Mesh.001": 0.693393
+          }
+        },
+        "Idle": {
+          "moves": true,
+          "sampledTransformDelta": 0.065,
+          "deforms": true,
+          "sampledShapeKeyDelta": 0.77,
+          "sampledShapeKeyChannels": 2,
+          "shapeKeyDeltasByMeshData": {
+            "Cinematic_Momo_Shroud_Mesh.001": 0.77
+          }
+        },
+        "Talk": {
+          "moves": true,
+          "sampledTransformDelta": 0.014999,
+          "deforms": true,
+          "sampledShapeKeyDelta": 0.38,
+          "sampledShapeKeyChannels": 2,
+          "shapeKeyDeltasByMeshData": {
+            "Cinematic_Momo_Shroud_Mesh.001": 0.38
+          }
+        },
+        "Think": {
+          "moves": true,
+          "sampledTransformDelta": 0.034993,
+          "deforms": true,
+          "sampledShapeKeyDelta": 0.38,
+          "sampledShapeKeyChannels": 2,
+          "shapeKeyDeltasByMeshData": {
+            "Cinematic_Momo_Shroud_Mesh.001": 0.38
+          }
+        }
+      }
+    },
+    "environment": {
+      "loaded": true,
+      "meshObjects": 1,
+      "triangles": 326331,
+      "glbAnimationChannels": {},
+      "materialChecks": {
+        "normalMappedMaterials": 22,
+        "rgbaMorphPrimitives": 0,
+        "minimumVertexAlpha": null,
+        "maximumVertexAlpha": null
+      },
+      "animationChecks": {}
+    },
+    "door": {
+      "loaded": true,
+      "meshObjects": 57,
+      "triangles": 7722,
+      "glbAnimationChannels": {
+        "Open": {
+          "weightChannels": 0,
+          "weightTargets": [],
+          "rotationTargets": [
+            "Cinematic_Escape_Door_Hinge"
+          ]
+        }
+      },
+      "materialChecks": {
+        "normalMappedMaterials": 3,
+        "rgbaMorphPrimitives": 0,
+        "minimumVertexAlpha": null,
+        "maximumVertexAlpha": null
+      },
+      "animationChecks": {
+        "Open": {
+          "moves": true,
+          "sampledTransformDelta": 1.173648,
+          "hingeRotates": true,
+          "hingeOpenDegrees": 100.0
+        }
+      }
+    }
+  }
+}
