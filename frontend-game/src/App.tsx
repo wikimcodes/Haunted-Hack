@@ -7,6 +7,7 @@ import { DirectorLink } from './components/DirectorLink'
 import type { AudioStatus } from './audio/LibraryAudio'
 import { canRecord, startRecording, type Recording } from './audio/recorder'
 import { GameApiError } from './api'
+import { dueScare, scareSchedule } from './scares'
 
 const spirits: Record<MonsterId, { name: string; title: string; description: string }> = {
   sprout: { name: 'Sprout', title: 'The friendly one', description: 'A warm welcome in a very cold room. Sprout always seems to have something to say.' },
@@ -35,6 +36,9 @@ function micError(err: unknown) {
   if (code === 'voice_unavailable') return 'Voice needs the server’s OpenAI key. You can still type.'
   if (code === 'no_speech') return 'The spirit heard only silence. Try again.'
   return 'Your words were lost in the dark. Try again, or type instead.'
+}
+function playedScares(key: string): number[] {
+  try { const value: unknown = JSON.parse(localStorage.getItem(key) ?? '[]'); return Array.isArray(value) ? value.filter(Number.isInteger) : [] } catch { return [] }
 }
 function time(seconds: number | null) { const n = seconds ?? 180; return `${Math.floor(n / 60).toString().padStart(2, '0')}:${(n % 60).toString().padStart(2, '0')}` }
 
@@ -129,6 +133,7 @@ export default function App() {
   const [revealToken, setRevealToken] = useState(0)
   const [cinematicActive, setCinematicActive] = useState(false)
   const [revealShowing, setRevealShowing] = useState(false)
+  const [scareToken, setScareToken] = useState(0)
   const [revealPreview, setRevealPreview] = useState(false)
   const historyEnd = useRef<HTMLDivElement>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -162,6 +167,18 @@ export default function App() {
     if (recording.current) { clearTimeout(recording.current.timer); recording.current.recording.cancel(); recording.current = null }
     setListening('idle')
   }, [selected])
+  // The witch's surprise glimpses: two or three per game, never during her reveal or a menu.
+  const scareBlocked = mode !== 'game' || game.isOver || paused || journal || confirm || cinematicActive || revealShowing || !ready || (game.secondsToReveal !== null && game.secondsToReveal <= 8)
+  useEffect(() => {
+    const state = game.state
+    if (!state || state.phase !== 'playing' || scareBlocked || document.hidden) return
+    const key = `spy-monster:scares:${state.sessionId}`
+    const played = playedScares(key)
+    const index = dueScare(scareSchedule(state.sessionId, state.startedAt, state.deadlineAt), played, Date.now() + game.clockOffsetMs, false)
+    if (index === null) return
+    try { localStorage.setItem(key, JSON.stringify([...played, index])) } catch {}
+    setScareToken(token => token + 1)
+  }, [game.secondsLeft, scareBlocked])
   useEffect(() => { historyEnd.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }) }, [game.messages, selected])
 
   function enableSound() { void world.current?.unlockAudio?.() }
@@ -227,7 +244,7 @@ export default function App() {
     setRevealToken(token => token + 1)
   }
   const presentation = !gameMode || !game.state ? 'introduction' : game.state.phase === 'won' ? 'won' : game.state.phase !== 'playing' ? 'lost' : game.state.clues.length ? 'suspicion' : 'introduction'
-  const sceneProps = { active: mode !== 'lobby' && !paused, interactive: !overlay, moods, doorOpen: gameMode && game.state?.phase === 'won', presentation, focusMonster: selected, revealToken, soundMuted, onAudioStatus: setAudioStatus, onCinematicChange: (active: boolean) => { setCinematicActive(active); if (!active) setRevealShowing(false) }, onProgress: setProgress, onReady: () => { setReady(true); setProgress(100) }, onError: setSceneError, onLockChange: setLocked, onTargetChange: setTarget, onInteract: meet } as const
+  const sceneProps = { active: mode !== 'lobby' && !paused, interactive: !overlay, moods, doorOpen: gameMode && game.state?.phase === 'won', presentation, focusMonster: selected, revealToken, scareToken, soundMuted, onAudioStatus: setAudioStatus, onCinematicChange: (active: boolean) => { setCinematicActive(active); if (!active) setRevealShowing(false) }, onProgress: setProgress, onReady: () => { setReady(true); setProgress(100) }, onError: setSceneError, onLockChange: setLocked, onTargetChange: setTarget, onInteract: meet } as const
 
   return <main className={`app mode-${mode}`} data-audio-status={audioStatus} data-sound-muted={soundMuted}>
     <World key={loadingKey} ref={world} {...sceneProps} />

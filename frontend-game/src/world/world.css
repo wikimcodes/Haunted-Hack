@@ -9,3 +9,13 @@
 .world-touch-KeyA { grid-column: 1; grid-row: 2; }
 .world-touch-KeyS { grid-column: 2; grid-row: 2; }
 .world-touch-KeyD { grid-column: 3; grid-row: 2; }
+/* The witch's surprise glimpse: a short jolt and a cold flash at the edges. */
+.world-scare > canvas { animation: world-scare-jolt .45s cubic-bezier(.36, .07, .19, .97) both; }
+.world-scare::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 45%, rgba(92, 52, 140, .55) 100%); animation: world-scare-edge 1.8s ease-out both; }
+@keyframes world-scare-jolt {
+  10%, 90% { transform: translate3d(-2px, 1px, 0) scale(1.012); }
+  20%, 80% { transform: translate3d(4px, -2px, 0) scale(1.02); }
+  30%, 50%, 70% { transform: translate3d(-6px, 2px, 0) scale(1.025); }
+  40%, 60% { transform: translate3d(6px, -1px, 0) scale(1.025); }
+}
+@keyframes world-scare-edge { 0% { opacity: 0; } 8% { opacity: 1; } 60% { opacity: .8; } 100% { opacity: 0; } }

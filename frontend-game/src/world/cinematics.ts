@@ -47,7 +47,10 @@ export function revealLighting(elapsed: number) {
     const valid = Number.isFinite(elapsed) && elapsed >= 0 && elapsed < REVEAL_DURATION
     const darkness = !valid ? 0 : elapsed < .22 ? ease(elapsed / .22)
         : elapsed < REVEAL_RETURN ? 1 : 1 - ease((elapsed - REVEAL_RETURN) / (REVEAL_DURATION - REVEAL_RETURN))
-    const presence = revealEnvelope(elapsed)
+    return sceneLighting(darkness, revealEnvelope(elapsed))
+}
+export type SceneLighting = ReturnType<typeof sceneLighting>
+function sceneLighting(darkness: number, presence: number) {
     return {
         darkness, presence,
         candles: 1 - .93 * darkness + .15 * presence,
@@ -56,6 +59,21 @@ export function revealLighting(elapsed: number) {
         environment: 1 - .84 * darkness,
         background: 1 - .52 * darkness
     }
+}
+/** A surprise glimpse: short, and unlike the reveal it never takes the camera. */
+export const SCARE_DURATION = 1.8
+/** The room drops out, the witch flickers in the window twice, holds, then the light returns. */
+export function scareLighting(elapsed: number, reducedMotion = false) {
+    if (!Number.isFinite(elapsed) || elapsed < 0 || elapsed >= SCARE_DURATION) return sceneLighting(0, 0)
+    const darkness = elapsed < .06 ? elapsed / .06 : elapsed < 1.05 ? 1 : 1 - ease((elapsed - 1.05) / (SCARE_DURATION - 1.05))
+    const fade = elapsed < 1.05 ? 1 : 1 - ease((elapsed - 1.05) / (SCARE_DURATION - 1.05))
+    // Reduced motion gets one steady appearance instead of the flicker.
+    const flicker = reducedMotion ? elapsed >= .12 : elapsed >= .12 && !(elapsed >= .2 && elapsed < .32) && !(elapsed >= .4 && elapsed < .46)
+    return sceneLighting(darkness, flicker ? fade : 0)
+}
+/** The darker, more present of two cues, so a glimpse and a reveal can never fight over the lights. */
+export function strongerLighting(a: SceneLighting, b: SceneLighting): SceneLighting {
+    return sceneLighting(Math.max(a.darkness, b.darkness), Math.max(a.presence, b.presence))
 }
 /** Sparse, slow practical-light variation. The reveal itself has no periodic flicker. */
 export function candleModulation(seconds: number, phase: number, revealing: number, reducedMotion: boolean): number {

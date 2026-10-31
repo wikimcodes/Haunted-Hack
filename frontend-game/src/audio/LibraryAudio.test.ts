@@ -181,3 +181,20 @@ test("the room falls quiet before the witch arrives and recovers after the cue",
     assert.equal(roomGain.value, normal)
     audio.dispose()
 })
+
+test("a surprise glimpse plays the sting's first hit once, ducks the room, and respects mute", async () => {
+    const { audio, ctx } = setup()
+    audio.update({ ...scene(), muted: true })
+    await audio.unlock(); await flush()
+    audio.scare()
+    assert.equal(ctx.sources.length, 0)
+    audio.update(scene()); await flush()
+    const room = ctx.sources.length
+    audio.scare()
+    assert.equal(ctx.sources.length, room + 1)
+    const glimpse = ctx.sources.at(-1)!
+    assert.equal(glimpse.loop, false)
+    assert.ok(glimpse.started!.offset > 0 && glimpse.started!.offset < .5)
+    audio.update({ ...scene(), muted: true })
+    assert.equal(glimpse.stopped, true)
+})
