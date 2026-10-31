@@ -34,6 +34,10 @@ Or run `zsh backend/set-keys.sh` once. It asks for the OpenAI and Terse keys wit
 | `ELEVENLABS_API_KEY` | none | With `ELEVENLABS_VOICE_ID`, the witch speaks with ElevenLabs instead of OpenAI. Any ElevenLabs error falls back to OpenAI. `zsh backend/set-elevenlabs.sh` saves it with hidden input. |
 | `ELEVENLABS_VOICE_ID` | none | ElevenLabs voice for the witch. Required for ElevenLabs speech. |
 | `ELEVENLABS_MODEL` | `eleven_multilingual_v2` | ElevenLabs text-to-speech model. |
+| `ELEVENLABS_VOICE_SPROUT` | Jessica (`cgSgspJ2msm6clMCkdW9`) | Sprout's voice. With `ELEVENLABS_API_KEY` set, each ghost speaks its replies in its own voice. Without the key, the ghosts use OpenAI voices (`coral`, `verse`, `onyx`). |
+| `ELEVENLABS_VOICE_PEBBLE` | Charlie (`IKne3meq5aSn9XLyUdCD`) | Pebble's voice. |
+| `ELEVENLABS_VOICE_MOMO` | Callum (`N2lVS1w4EtoT3dr4eOWO`) | Momo's voice. |
+| `ELEVENLABS_CONCURRENCY` | `2` | ElevenLabs requests in flight at once. Extra lines queue, and a 429 is retried before falling back to OpenAI. Raise it if your plan allows more. |
 | `SUPABASE_URL` | none | Optional cross-game leaderboard. Without it, games are not archived and the game runs unchanged. |
 | `SUPABASE_SERVICE_ROLE_KEY` | none | Required together with `SUPABASE_URL`. Server-only: never expose it to the frontend. |
 

@@ -189,6 +189,46 @@ test("game client lifecycle and actual API contract", async t => {
         } finally { connection.close(); env.restore() }
     })
 
+    await t.test("ghost replies are spoken in turn, and muting stops and skips them", async () => {
+        const bodies: { requestId: string; voice: boolean }[] = []
+        const env = environment(async (input, options) => {
+            const url = String(input)
+            if (url.endsWith("/chat")) {
+                const body = JSON.parse(String(options!.body))
+                bodies.push(body)
+                return json({ monsterId: body.monsterId, reply: "Boo.", factId: "f", source: "openai", voice: body.voice })
+            }
+            if (url.endsWith("/socket")) return json({ websocketUrl: "ws://current" })
+            return json(state("one"))
+        })
+        const played: { src: string; paused: boolean }[] = []
+        class FakeAudio {
+            paused = false
+            constructor(readonly src: string) { played.push(this) }
+            play() { return Promise.resolve() }
+            pause() { this.paused = true }
+        }
+        const previousAudio = Object.getOwnPropertyDescriptor(globalThis, "Audio")
+        Object.defineProperty(globalThis, "Audio", { configurable: true, writable: true, value: FakeAudio })
+        const connection = new GameConnection("http://api.test")
+        try {
+            await connection.resume("one")
+            await connection.chat("sprout", "hello")
+            await connection.chat("momo", "and you?")
+            assert.deepEqual(played.map(a => a.src), bodies.map(b => `http://api.test/api/game/one/reply-voice/${b.requestId}`))
+            assert.deepEqual(played.map(a => a.paused), [true, false], "a newer reply interrupts the previous one")
+            connection.setVoices(false)
+            assert.equal(played[1]!.paused, true, "muting stops the current line")
+            await connection.chat("pebble", "quiet now")
+            assert.equal(bodies.at(-1)!.voice, false, "a muted client does not ask the server to spend a voice")
+            assert.equal(played.length, 2)
+        } finally {
+            connection.close(); env.restore()
+            if (previousAudio) Object.defineProperty(globalThis, "Audio", previousAudio)
+            else delete (globalThis as { Audio?: unknown }).Audio
+        }
+    })
+
     await t.test("API timeout aborts hanging requests and preserves backend error codes", async () => {
         const env = environment(async (_input, options) => new Promise<Response>((_resolve, reject) => {
             options!.signal!.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")))

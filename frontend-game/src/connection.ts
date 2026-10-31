@@ -35,11 +35,12 @@ export class GameConnection {
     #socketGeneration = 0
     #retryTimer: ReturnType<typeof setTimeout> | null = null
 
-    #witchVoice: boolean
+    #voices: boolean
     #spokenClues: Set<string> | null = null
+    #ghostVoice: HTMLAudioElement | null = null
 
-    constructor(apiUrl: string, options: { witchVoice?: boolean } = {}) {
-        this.#witchVoice = options.witchVoice ?? true
+    constructor(apiUrl: string, options: { voices?: boolean } = {}) {
+        this.#voices = options.voices ?? true
         this.api = createGameApi(apiUrl, {
             onServerTime: offset => {
                 if (Math.abs(offset - this.#snapshot.clockOffsetMs) > 250) this.#set({ clockOffsetMs: Math.round(offset) })
@@ -116,10 +117,12 @@ export class GameConnection {
         this.#pushChat({ id: crypto.randomUUID(), monsterId, role: "player", text: message, at: Date.now() })
         this.#setWaiting([...this.#snapshot.waiting, monsterId], { error: null })
         try {
-            const result = await this.api.chat(sessionId, monsterId, message)
+            const requestId = crypto.randomUUID()
+            const result = await this.api.chat(sessionId, monsterId, message, requestId, this.#voices)
             if (!this.#isCurrent(generation, sessionId)) return false
             this.#pushChat({ id: crypto.randomUUID(), monsterId, role: "monster", text: result.reply, at: Date.now() })
             this.#setWaiting(this.#snapshot.waiting.filter(m => m !== monsterId))
+            if (result.voice) this.#speakReply(sessionId, requestId)
             return true
         } catch (err) {
             if (!this.#isCurrent(generation, sessionId)) return false
@@ -159,6 +162,7 @@ export class GameConnection {
     close(): void {
         this.#closed = true
         this.#generation++
+        this.#stopGhostVoice()
         this.#cancelSocket()
         this.#setWaiting([], { connected: false })
     }
@@ -236,9 +240,24 @@ export class GameConnection {
         this.#speakNewClues(state)
     }
 
-    /** Turns the witch's spoken clues on or off (on by default). */
-    setWitchVoice(on: boolean): void {
-        this.#witchVoice = on
+    /** Turns spoken lines on or off: the witch's clues and the ghosts' replies (on by default). */
+    setVoices(on: boolean): void {
+        this.#voices = on
+        if (!on) this.#stopGhostVoice()
+    }
+
+    // The text is already on screen; the ghost's voice follows once its MP3 arrives.
+    // A newer reply interrupts the previous one, so ghosts never talk over each other.
+    #speakReply(sessionId: string, requestId: string): void {
+        if (!this.#voices || typeof Audio === "undefined") return
+        this.#stopGhostVoice()
+        const audio = (this.#ghostVoice = new Audio(this.api.replyVoiceUrl(sessionId, requestId)))
+        void audio.play().catch(() => {})
+    }
+
+    #stopGhostVoice(): void {
+        this.#ghostVoice?.pause()
+        this.#ghostVoice = null
     }
 
     // Speaks clues revealed while this client is watching. Clues that already existed when the
@@ -251,7 +270,7 @@ export class GameConnection {
         for (const clue of state.clues) {
             if (this.#spokenClues.has(clue.id)) continue
             this.#spokenClues.add(clue.id)
-            if (this.#witchVoice && typeof Audio !== "undefined") {
+            if (this.#voices && typeof Audio !== "undefined") {
                 // Browsers only allow sound after the player has tapped something; starting the game counts.
                 void new Audio(this.api.voiceUrl(state.sessionId, clue.id)).play().catch(() => {})
             }
