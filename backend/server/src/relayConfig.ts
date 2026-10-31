@@ -48,6 +48,34 @@ export async function withRelayRetry<T>(label: string, fn: () => Promise<T>, att
     }
 }
 
+/**
+ * Relay's push delivery can lag by tens of seconds. Agents also poll their own inbox and hand
+ * each conversation's newest unread message to `handle` (which must ignore IDs it has seen).
+ * The game logic only needs the newest message per conversation: it re-reads its briefing.
+ */
+export function pollInbox(
+    agent: { inbox: { get(options?: { limit?: number }): Promise<{ unreadDms?: { lastMessage?: { id?: string } }[] }> } },
+    handle: (messageId: string) => void,
+    intervalMs = 1500
+): () => void {
+    let stopped = false
+    const tick = async () => {
+        while (!stopped) {
+            try {
+                const inbox = await agent.inbox.get()
+                for (const dm of inbox.unreadDms ?? []) if (dm.lastMessage?.id) handle(dm.lastMessage.id)
+            } catch (err) {
+                console.warn("[relay] inbox poll failed:", String(err))
+            }
+            await Bun.sleep(intervalMs)
+        }
+    }
+    void tick()
+    return () => {
+        stopped = true
+    }
+}
+
 /** Connects as one named agent using only that agent's token. */
 export async function connectAgent(name: AgentName, config?: RelayConfig) {
     const cfg = config ?? (await loadRelayConfig())

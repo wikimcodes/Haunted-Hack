@@ -91,6 +91,19 @@
   .locked .big { font: 600 22px/1.3 Georgia, serif; margin-bottom: 8px; }
   .locked .clock { font: 600 44px/1 ui-monospace, Menlo, monospace; color: var(--candle); margin: 16px 0; }
   .err { color: var(--rose); }
+  .live { text-align: left; max-width: 760px; margin: 28px auto 0; }
+  .live h3 { margin: 0 0 4px; font: 600 13px/1.4 -apple-system, sans-serif; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--rose); box-shadow: 0 0 0 0 rgba(214,107,133,0.6); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 70% { box-shadow: 0 0 0 8px rgba(214,107,133,0); } 100% { box-shadow: 0 0 0 0 rgba(214,107,133,0); } }
+  @media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
+  .feed { list-style: none; margin: 12px 0 0; padding: 0; }
+  .feed li { display: grid; grid-template-columns: 58px 1fr auto; gap: 12px; align-items: center; padding: 10px 12px; margin-bottom: 6px; background: var(--panel-2); border-radius: 10px; font-size: 14px; }
+  .feed li.new { animation: arrive 0.6s ease-out; }
+  @keyframes arrive { from { background: rgba(181,140,242,0.25); } }
+  .feed .t { color: var(--muted); font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  .feed .who { font-weight: 600; }
+  .feed .redacted { display: inline-block; height: 10px; border-radius: 5px; background: var(--muted); opacity: 0.35; filter: blur(2px); vertical-align: middle; margin-left: 10px; }
+  .feed .id { color: var(--muted); font-family: ui-monospace, Menlo, monospace; font-size: 11px; }
 </style>
 </head>
 <body>
@@ -115,6 +128,7 @@ const picker = document.getElementById("picker")
 let current = new URLSearchParams(location.search).get("game")
 let pollTimer = null
 let clockTimer = null
+const live = { game: null, since: null, rows: [], seen: new Set() }
 
 // ---------- tiny DOM helper (always textContent, never innerHTML for data) ----------
 function el(tag, attrs = {}, ...children) {
@@ -144,7 +158,7 @@ async function loadPicker() {
     const label = `${g.sessionId} · ${new Date(g.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · ${g.phase}`
     return el("option", { value: g.sessionId }, label)
   }))
-  if (!current && games.length) current = (games.find(g => g.phase !== "playing") || games[0]).sessionId
+  if (!current && games.length) current = games[0].sessionId
   if (current && !games.some(g => g.sessionId === current)) picker.prepend(el("option", { value: current }, current))
   picker.value = current || ""
 }
@@ -162,14 +176,43 @@ async function show() {
   }
 }
 
+async function pollLive() {
+  if (live.game !== current) { live.game = current; live.since = null; live.rows = []; live.seen = new Set() }
+  const fresh = new Set()
+  try {
+    const q = live.since === null ? "" : `?since=${live.since}`
+    const data = await getJSON(`/api/game/${current}/relay-live${q}`)
+    live.since = data.nextSince
+    for (const r of data.events) {
+      if (live.seen.has(r.relayMessageId)) continue
+      live.seen.add(r.relayMessageId); fresh.add(r.relayMessageId); live.rows.push(r)
+    }
+  } catch {}
+  return fresh
+}
+
 async function renderLocked() {
   const state = await getJSON(`/api/game/${current}`).catch(() => null)
   const clock = el("div", { class: "clock" }, state ? clockOf(state.deadlineAt - Date.now()) : "--:--")
+  const fresh = await pollLive()
+  const whispers = live.rows.filter(r => r.kind === "whisper").length
+  const feed = el("section", { class: "live" },
+    el("h3", {}, el("span", { class: "dot", "aria-hidden": "true" }), "Live on Agent Relay"),
+    el("div", { class: "sub" }, `${live.rows.length} messages so far, ${whispers} between agents. Senders and words stay hidden until the game ends.`),
+    el("ul", { class: "feed" }, live.rows.slice().reverse().slice(0, 12).map(r => el("li", { class: fresh.has(r.relayMessageId) ? "new" : "" },
+      el("span", { class: "t" }, state ? `+${clockOf(r.at - state.startedAt)}` : ""),
+      el("span", {},
+        el("span", { class: "who" }, r.kind === "handoff" ? "Game master → a monster" : "A monster whispered"),
+        el("span", { class: "redacted", style: `width:${Math.min(40 + r.length * 2, 260)}px`, "aria-label": "hidden message" })),
+      el("span", { class: "id" }, r.relayMessageId)
+    )))
+  )
   root.replaceChildren(el("section", { class: "panel locked" },
     el("div", { class: "big" }, "The game is still running"),
     el("div", {}, "The Director View unlocks the moment the game ends, so nobody can peek at the spy."),
     clock,
-    el("div", { class: "sub" }, state ? `Round ${state.round} · ${state.clues.length} clue${state.clues.length === 1 ? "" : "s"} revealed` : "")
+    el("div", { class: "sub" }, state ? `Round ${state.round} · ${state.clues.length} clue${state.clues.length === 1 ? "" : "s"} revealed` : ""),
+    feed
   ))
   if (state) clockTimer = setInterval(() => { clock.textContent = clockOf(state.deadlineAt - Date.now()) }, 500)
   pollTimer = setTimeout(show, 2000)
@@ -351,7 +394,7 @@ function flowGraph(v, messages) {
     const isSpy = id === v.spyId
     svg.append(s("circle", { cx: x, cy: y, r: R, fill: fills[id], stroke: isSpy ? "#d66b85" : id === "witch" ? "#b58cf2" : "#2b3357", "stroke-width": isSpy ? "4" : "2" }))
     const t = s("text", { x, y: y + 5, fill: "#e9e6f5", "font-size": "14", "font-weight": "600", "text-anchor": "middle" }); t.textContent = id === "player" ? "Player" : name(id); svg.append(t)
-    if (isSpy) { const b = s("text", { x, y: y + R + 18, fill: "#d66b85", "font-size": "12", "font-weight": "700", "text-anchor": "middle", "letter-spacing": "0.08em" }); b.textContent = "SPY"; svg.append(b) }
+    if (isSpy) { const b = s("text", { x: x - R - 8, y: y + 5, fill: "#d66b85", "font-size": "12", "font-weight": "700", "text-anchor": "end", "letter-spacing": "0.08em" }); b.textContent = "SPY"; svg.append(b) }
   }
   return svg
 }
