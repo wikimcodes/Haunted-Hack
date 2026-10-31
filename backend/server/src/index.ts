@@ -4,6 +4,7 @@
 import { fileURLToPath } from "node:url"
 
 import { actors } from "../generated/index.js"
+import { archiveGame, leaderboard, startArchiver } from "./archive"
 import { monsterReply } from "./llm"
 import { connectAgent, loadRelayConfig, withRelayRetry } from "./relayConfig"
 import { MONSTER_IDS, MONSTER_NAMES, isMonsterId, type MonsterId, type RelayMeta } from "./types"
@@ -15,6 +16,7 @@ const MAX_MESSAGE_CHARS = 300
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN ?? "*"
 
 const relayConfig = await loadRelayConfig()
+const RELAY_MODE = relayConfig.baseUrl ? "local" : "hosted"
 const { agent: gamemaster } = await connectAgent("gamemaster", relayConfig)
 
 const game = (sessionId: string) => actors.GameActor.get(sessionId)
@@ -130,6 +132,8 @@ async function accuse(req: Request, sessionId: string) {
     if (!isMonsterId(input.monsterId)) throw new HttpError(400, "unknown_monster")
     await requireGame(sessionId)
     const state = await game(sessionId).accuse(input.monsterId)
+    // Archive straight away so the leaderboard updates the moment the game ends.
+    archiveGame(sessionId, RELAY_MODE).catch(err => console.warn("[archive]", sessionId, String(err).slice(0, 160)))
     return json({ outcome: state.phase, state })
 }
 
@@ -270,6 +274,7 @@ const routes: [string, RegExp, (req: Request, m: RegExpMatchArray) => Promise<Re
     ["GET", /^\/health$/, async () => json({ ok: true, relayWorkspace: relayConfig.workspaceName, relay: relayConfig.baseUrl ? "local" : "hosted" })],
     ["GET", /^\/director\/?$/, async () => new Response(Bun.file(DIRECTOR_PAGE), { headers: { "content-type": "text/html; charset=utf-8" } })],
     ["GET", /^\/api\/games\/recent$/, () => recentGames()],
+    ["GET", /^\/api\/leaderboard$/, async () => json((await leaderboard()) ?? { disabled: true })],
     ["POST", /^\/api\/game\/start$/, req => startGame(req)],
     ["GET", /^\/api\/game\/([\w-]+)$/, async (_req, m) => json(await requireGame(m[1]!))],
     ["POST", /^\/api\/game\/([\w-]+)\/chat$/, (req, m) => chat(req, m[1]!)],
@@ -328,3 +333,4 @@ Bun.serve<RelaySocketData>({
 })
 
 console.log(`Spy Monster server on http://localhost:${PORT} (${relayConfig.baseUrl ? "local" : "hosted"} Relay workspace ${relayConfig.workspaceName})`)
+startArchiver(RELAY_MODE)
