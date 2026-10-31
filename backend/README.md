@@ -86,6 +86,10 @@ Open the `websocketUrl` from `/socket` right away (it expires). You receive:
 4. Whoever is the spy DMs the witch. The `witch` process passes Relay's sender to `GameActor.acceptReport`, which rejects anyone who is not the spy.
 5. The actor alarm fires every reveal interval (even with no one connected) and the witch echoes a report, clears an innocent, or counts whispers.
 
+## The witch's voice
+
+Each revealed clue can be spoken with OpenAI text-to-speech (`gpt-4o-mini-tts`, voice set by `WITCH_VOICE`, default `fable`): `GET /api/game/:id/voice/:clueId` returns an MP3. Only clues already in the public state can be voiced, so it never leaks anything early; each clue is generated once and cached. The Director screen has a **Sound** button (browsers need one click before playing audio) and then reads every new clue aloud; the frontend hook does the same automatically.
+
 ## Leaderboard (Supabase, optional)
 
 Live games stay in Terse actors (one per game). When a game ends, the server writes one summary row to Supabase Postgres, so all-games questions never wake every actor. Accusations archive immediately; dawn endings are picked up by a 10-second sweep. The Director screen shows an "All games" panel (games played, escape rate, fastest catch, most deceptive monster); `GET /api/leaderboard` returns the same data.

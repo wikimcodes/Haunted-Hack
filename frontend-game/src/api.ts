@@ -54,7 +54,9 @@ export function createGameApi(
             request<{ outcome: PublicGameState["phase"]; state: PublicGameState }>("POST", `${gamePath(sessionId)}/accuse`, { monsterId }),
         socket: (sessionId: string, role: "player" | "director" = "player") =>
             request<{ websocketUrl: string }>("POST", `${gamePath(sessionId)}/socket`, { role }),
-        director: (sessionId: string) => request<unknown>("GET", `${gamePath(sessionId)}/director`)
+        director: (sessionId: string) => request<unknown>("GET", `${gamePath(sessionId)}/director`),
+        /** MP3 of the witch speaking a revealed clue (OpenAI text-to-speech). */
+        voiceUrl: (sessionId: string, clueId: string) => `${base}${gamePath(sessionId)}/voice/${encodeURIComponent(clueId)}`
     }
 }
 

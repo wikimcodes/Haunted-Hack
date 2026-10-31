@@ -35,7 +35,11 @@ export class GameConnection {
     #socketGeneration = 0
     #retryTimer: ReturnType<typeof setTimeout> | null = null
 
-    constructor(apiUrl: string) {
+    #witchVoice: boolean
+    #spokenClues: Set<string> | null = null
+
+    constructor(apiUrl: string, options: { witchVoice?: boolean } = {}) {
+        this.#witchVoice = options.witchVoice ?? true
         this.api = createGameApi(apiUrl, {
             onServerTime: offset => {
                 if (Math.abs(offset - this.#snapshot.clockOffsetMs) > 250) this.#set({ clockOffsetMs: Math.round(offset) })
@@ -70,6 +74,7 @@ export class GameConnection {
         const generation = this.#beginSession()
         const state = await this.api.start(options)
         if (!this.#isCurrent(generation)) throw new DOMException("Game connection was closed or replaced", "AbortError")
+        this.#spokenClues = new Set() // a brand-new game: speak every clue
         this.#remember(state.sessionId)
         this.#set({ state, chat: [], error: null })
         void this.#connect(state.sessionId, generation)
@@ -86,6 +91,7 @@ export class GameConnection {
         try {
             const state = await this.api.get(sessionId)
             if (!this.#isCurrent(generation)) return null
+            this.#spokenClues = null // rejoining: don't replay clues revealed before we arrived
             this.#remember(sessionId)
             this.#set({ state, error: null, chat: this.#loadChat(sessionId) })
             void this.#connect(sessionId, generation)
@@ -225,6 +231,33 @@ export class GameConnection {
         }, wait)
     }
 
+    #applyState(state: PublicGameState): void {
+        this.#set({ state })
+        this.#speakNewClues(state)
+    }
+
+    /** Turns the witch's spoken clues on or off (on by default). */
+    setWitchVoice(on: boolean): void {
+        this.#witchVoice = on
+    }
+
+    // Speaks clues revealed while this client is watching. Clues that already existed when the
+    // client joined (a refresh, a second phone) are not replayed.
+    #speakNewClues(state: PublicGameState): void {
+        if (!this.#spokenClues) {
+            this.#spokenClues = new Set(state.clues.map(c => c.id))
+            return
+        }
+        for (const clue of state.clues) {
+            if (this.#spokenClues.has(clue.id)) continue
+            this.#spokenClues.add(clue.id)
+            if (this.#witchVoice && typeof Audio !== "undefined") {
+                // Browsers only allow sound after the player has tapped something; starting the game counts.
+                void new Audio(this.api.voiceUrl(state.sessionId, clue.id)).play().catch(() => {})
+            }
+        }
+    }
+
     #receive(raw: string): void {
         if (raw === "pong") return
         let message: { type?: string; state?: { publicState?: PublicGameState }; changes?: { publicState?: PublicGameState } }
@@ -233,8 +266,8 @@ export class GameConnection {
         } catch {
             return
         }
-        if (message.type === "state" && message.state?.publicState?.sessionId === this.#sessionId) this.#set({ state: message.state.publicState })
-        else if (message.type === "state_update" && message.changes?.publicState?.sessionId === this.#sessionId) this.#set({ state: message.changes.publicState })
+        if (message.type === "state" && message.state?.publicState?.sessionId === this.#sessionId) this.#applyState(message.state.publicState)
+        else if (message.type === "state_update" && message.changes?.publicState?.sessionId === this.#sessionId) this.#applyState(message.changes.publicState)
         else if (message.type === "cue") this.#cueListeners.forEach(l => l(message as unknown as Cue))
     }
 

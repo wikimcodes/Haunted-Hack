@@ -14,10 +14,13 @@ export interface UseSpyMonsterOptions {
     apiUrl: string
     /** Rejoin the last game (or ?game=<id>) on load. Default true. */
     autoResume?: boolean
+    /** Speak each new witch clue aloud (OpenAI text-to-speech). Default true. */
+    witchVoice?: boolean
 }
 
-export function useSpyMonster({ apiUrl, autoResume = true }: UseSpyMonsterOptions) {
-    const connection = useMemo(() => new GameConnection(apiUrl), [apiUrl])
+export function useSpyMonster({ apiUrl, autoResume = true, witchVoice = true }: UseSpyMonsterOptions) {
+    const connection = useMemo(() => new GameConnection(apiUrl, { witchVoice }), [apiUrl])
+    useEffect(() => connection.setWitchVoice(witchVoice), [connection, witchVoice])
     const snapshot = useSyncExternalStore(connection.subscribe, connection.getSnapshot, connection.getSnapshot)
     const now = useNow(snapshot.state?.phase === "playing")
 
@@ -42,6 +45,8 @@ export function useSpyMonster({ apiUrl, autoResume = true }: UseSpyMonsterOption
         accuse: (monsterId: MonsterId) => connection.accuse(monsterId),
         director: () => connection.director(),
         shareUrl: () => connection.shareUrl(),
+        /** MP3 URL of the witch speaking a revealed clue, for custom audio handling. */
+        witchVoiceUrl: (clueId: string) => (state ? connection.api.voiceUrl(state.sessionId, clueId) : null),
         /** Subscribe to animation cues for the lifetime of the calling component. */
         useCue: (handler: (cue: Cue) => void) => useCueListener(connection, handler)
     }

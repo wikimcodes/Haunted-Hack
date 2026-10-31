@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url"
 
 import { actors } from "../generated/index.js"
 import { archiveGame, leaderboard, startArchiver } from "./archive"
-import { monsterReply } from "./llm"
+import { monsterReply, witchSpeech } from "./llm"
 import { connectAgent, loadRelayConfig, withRelayRetry } from "./relayConfig"
 import { MONSTER_IDS, MONSTER_NAMES, isMonsterId, type MonsterId, type RelayMeta } from "./types"
 
@@ -172,6 +172,28 @@ async function director(sessionId: string) {
     return json({ ...view, relay: { workspace: relayConfig.workspaceName, messages: relayMessages } })
 }
 
+// The witch speaks each revealed clue aloud. Only clues already in the public state can be voiced,
+// so this never leaks anything. Each clue is generated once and cached.
+const voiceCache = new Map<string, Promise<ArrayBuffer | null>>()
+
+async function witchVoice(sessionId: string, clueId: string) {
+    const state = await requireGame(sessionId)
+    const clue = state.clues.find(c => c.id === clueId)
+    if (!clue) throw new HttpError(404, "clue_not_revealed")
+    const key = `${sessionId}:${clueId}`
+    if (!voiceCache.has(key)) {
+        const audio = witchSpeech(clue.content)
+        voiceCache.set(key, audio)
+        audio.then(a => !a && voiceCache.delete(key))
+        if (voiceCache.size > 500) voiceCache.delete(voiceCache.keys().next().value!)
+    }
+    const audio = await voiceCache.get(key)
+    if (!audio) throw new HttpError(503, "voice_unavailable")
+    return new Response(audio, {
+        headers: { "content-type": "audio/mpeg", "cache-control": "public, max-age=86400", "access-control-allow-origin": ALLOWED_ORIGIN }
+    })
+}
+
 async function recentGames() {
     const recent = await actors.Lobby.get("main").list()
     const games = await Promise.all(
@@ -281,7 +303,8 @@ const routes: [string, RegExp, (req: Request, m: RegExpMatchArray) => Promise<Re
     ["POST", /^\/api\/game\/([\w-]+)\/accuse$/, (req, m) => accuse(req, m[1]!)],
     ["POST", /^\/api\/game\/([\w-]+)\/socket$/, (req, m) => socket(req, m[1]!)],
     ["GET", /^\/api\/game\/([\w-]+)\/director$/, (_req, m) => director(m[1]!)],
-    ["GET", /^\/api\/game\/([\w-]+)\/relay-live$/, (req, m) => relayLive(req, m[1]!)]
+    ["GET", /^\/api\/game\/([\w-]+)\/relay-live$/, (req, m) => relayLive(req, m[1]!)],
+    ["GET", /^\/api\/game\/([\w-]+)\/voice\/([\w-]+)$/, (_req, m) => witchVoice(m[1]!, m[2]!)]
 ]
 
 Bun.serve<RelaySocketData>({

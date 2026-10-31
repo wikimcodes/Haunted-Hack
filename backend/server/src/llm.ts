@@ -105,3 +105,23 @@ export async function monsterReply(ctx: MonsterContext): Promise<MonsterReply> {
         return fallback()
     }
 }
+
+// ----- the witch's voice -------------------------------------------------------
+
+const TTS_MODEL = process.env.WITCH_TTS_MODEL ?? "gpt-4o-mini-tts"
+const WITCH_VOICE = process.env.WITCH_VOICE ?? "fable"
+const WITCH_STYLE =
+    "You are an old, theatrical Halloween witch. Speak slowly with a raspy, sly, sinister-but-playful tone and a little cackle at the start. Savour the words."
+
+/** Speaks one witch line with OpenAI text-to-speech. Returns MP3 bytes, or null if unavailable. */
+export async function witchSpeech(text: string): Promise<ArrayBuffer | null> {
+    if (!client) return null
+    try {
+        const res = await client.audio.speech.create({ model: TTS_MODEL, voice: WITCH_VOICE, input: text.slice(0, 400), instructions: WITCH_STYLE, response_format: "mp3" })
+        return await res.arrayBuffer()
+    } catch (err) {
+        console.error("[voice] failed:", String(err).slice(0, 160))
+        return null
+    }
+}
+

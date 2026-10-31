@@ -115,6 +115,7 @@
       <span class="sr" style="position:absolute;left:-9999px">Game</span>
       <select id="picker" aria-label="Game"></select>
     </label>
+    <button id="sound" type="button" aria-pressed="false">Sound off</button>
     <button id="refresh" type="button">Refresh</button>
   </header>
   <main id="root"><div class="empty">Loading…</div></main>
@@ -129,6 +130,35 @@ let current = new URLSearchParams(location.search).get("game")
 let pollTimer = null
 let clockTimer = null
 const live = { game: null, since: null, rows: [], seen: new Set(), board: null, boardAt: 0 }
+
+// ---------- the witch's voice ----------
+// Speaks clues revealed while this screen is open (the browser needs one click on "Sound" first).
+const voice = { on: false, game: null, spoken: new Set(), queue: Promise.resolve() }
+function speakNewClues(state) {
+  if (!state) return
+  if (voice.game !== state.sessionId) {
+    voice.game = state.sessionId
+    voice.spoken = new Set(state.clues.map(c => c.id)) // don't replay what was said before we arrived
+    return
+  }
+  for (const clue of state.clues) {
+    if (voice.spoken.has(clue.id)) continue
+    voice.spoken.add(clue.id)
+    if (!voice.on) continue
+    // Queue lines so two clues revealed together are spoken one after the other.
+    voice.queue = voice.queue.then(() => new Promise(resolve => {
+      const audio = new Audio(`/api/game/${state.sessionId}/voice/${clue.id}`)
+      audio.onended = audio.onerror = resolve
+      audio.play().catch(resolve)
+    }))
+  }
+}
+const soundBtn = document.getElementById("sound")
+soundBtn.addEventListener("click", () => {
+  voice.on = !voice.on
+  soundBtn.textContent = voice.on ? "Sound on" : "Sound off"
+  soundBtn.setAttribute("aria-pressed", String(voice.on))
+})
 
 // ---------- tiny DOM helper (always textContent, never innerHTML for data) ----------
 function el(tag, attrs = {}, ...children) {
@@ -193,6 +223,7 @@ async function pollLive() {
 
 async function renderLocked() {
   const state = await getJSON(`/api/game/${current}`).catch(() => null)
+  speakNewClues(state)
   const clock = el("div", { class: "clock" }, state ? clockOf(state.deadlineAt - Date.now()) : "--:--")
   const fresh = await pollLive()
   const whispers = live.rows.filter(r => r.kind === "whisper").length
@@ -223,6 +254,7 @@ async function renderLocked() {
 // ---------- render ----------
 function render(v) {
   const pub = v.public
+  speakNewClues(pub)
   const relayById = Object.fromEntries((v.relay?.messages || []).map(m => [m.id, m]))
   const t0 = pub.startedAt
   const endedAt = (pub.clues.find(c => c.kind === "ending") || {}).revealedAt || pub.accusation?.at || pub.deadlineAt
