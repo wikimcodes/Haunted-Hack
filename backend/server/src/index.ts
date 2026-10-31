@@ -181,7 +181,11 @@ async function recentGames() {
 
 // Live Relay feed for the Director screen, read from Relay's durable workspace event log.
 // While the game runs, sender and text are hidden so the screen cannot give the spy away.
-const RELAY_API = relayConfig.workspaceKey.startsWith("rk_") ? "https://cast.agentrelay.com/v1" : "https://armadillo.agentrelay.com/v1"
+const RELAY_API = relayConfig.baseUrl
+    ? `${relayConfig.baseUrl.replace(/\/$/, "")}/v1`
+    : relayConfig.workspaceKey.startsWith("rk_")
+      ? "https://cast.agentrelay.com/v1"
+      : "https://armadillo.agentrelay.com/v1"
 
 interface RelayLogEvent {
     seq: number
@@ -263,7 +267,7 @@ const DIRECTOR_PAGE = fileURLToPath(new URL("../public/director.html", import.me
 // ----- router ----------------------------------------------------------------
 
 const routes: [string, RegExp, (req: Request, m: RegExpMatchArray) => Promise<Response>][] = [
-    ["GET", /^\/health$/, async () => json({ ok: true, relayWorkspace: relayConfig.workspaceName })],
+    ["GET", /^\/health$/, async () => json({ ok: true, relayWorkspace: relayConfig.workspaceName, relay: relayConfig.baseUrl ? "local" : "hosted" })],
     ["GET", /^\/director\/?$/, async () => new Response(Bun.file(DIRECTOR_PAGE), { headers: { "content-type": "text/html; charset=utf-8" } })],
     ["GET", /^\/api\/games\/recent$/, () => recentGames()],
     ["POST", /^\/api\/game\/start$/, req => startGame(req)],
@@ -322,4 +326,4 @@ Bun.serve<RelaySocketData>({
     }
 })
 
-console.log(`Spy Monster server on http://localhost:${PORT} (Relay workspace ${relayConfig.workspaceName})`)
+console.log(`Spy Monster server on http://localhost:${PORT} (${relayConfig.baseUrl ? "local" : "hosted"} Relay workspace ${relayConfig.workspaceName})`)

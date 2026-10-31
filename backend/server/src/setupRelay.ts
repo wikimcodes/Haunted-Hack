@@ -4,7 +4,7 @@
 
 import { AgentRelay } from "@agent-relay/sdk"
 
-import { AGENT_NAMES, loadRelayConfig, saveRelayConfig, type AgentName } from "./relayConfig"
+import { AGENT_NAMES, LOCAL_RELAY_URL, RELAY_LOCAL, loadRelayConfig, saveRelayConfig, type AgentName } from "./relayConfig"
 
 const force = process.argv.includes("--force")
 const existing = await loadRelayConfig().catch(() => null)
@@ -14,7 +14,8 @@ if (existing && !force) {
 }
 
 const workspaceName = `spy-monster-${Date.now()}`
-const relay = await AgentRelay.createWorkspace({ name: workspaceName })
+const baseUrl = RELAY_LOCAL ? LOCAL_RELAY_URL : undefined
+const relay = await AgentRelay.createWorkspace({ name: workspaceName, ...(baseUrl ? { baseUrl } : {}) })
 if (!relay.workspaceKey) throw new Error("Relay did not return a workspace key")
 
 const registered = await relay.workspace.register(AGENT_NAMES.map(name => ({ name, type: "agent" as const })))
@@ -24,6 +25,6 @@ for (const agent of registered) {
     tokens[agent.name as AgentName] = agent.token
 }
 
-await saveRelayConfig({ workspaceName, workspaceKey: relay.workspaceKey, tokens })
-console.log(`Created Relay workspace ${workspaceName} with agents: ${AGENT_NAMES.join(", ")}`)
+await saveRelayConfig({ workspaceName, workspaceKey: relay.workspaceKey, tokens, ...(baseUrl ? { baseUrl } : {}) })
+console.log(`Created ${baseUrl ? "local" : "hosted"} Relay workspace ${workspaceName} with agents: ${AGENT_NAMES.join(", ")}`)
 process.exit(0)

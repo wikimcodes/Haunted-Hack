@@ -19,6 +19,14 @@ Keys: run `zsh backend/set-keys.sh` once. It asks for the OpenAI and Terse API k
 
 It starts the game server and the four agents (plus local Terse when not deployed), creates a Relay workspace if there isn't one, and stops everything on Ctrl+C.
 
+**If hosted Agent Relay is overloaded** (sends take 10-30s or fail with 503 "database_overloaded"), run Relay's open-source engine on the laptop instead:
+
+```bash
+cd backend && RELAY=local bun demo.ts
+```
+
+It starts `@relaycast/engine` on port 8787, creates a separate local workspace (`server/.relay.local.json`) and points the server and agents at it. Sends drop to milliseconds. Same Agent Relay protocol and SDK, just not the hosted cloud.
+
 **Or by hand (3 terminals):**
 
 Needs Bun 1.4.2+ (`bun upgrade`) and the Terse CLI (`bunx terse-cli@latest install --yes`).

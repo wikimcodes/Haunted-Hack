@@ -12,9 +12,17 @@ export interface RelayConfig {
     workspaceName: string
     workspaceKey: string
     tokens: Record<AgentName, string>
+    /** Set for a self-hosted Relay engine; hosted Relay when absent. */
+    baseUrl?: string
 }
 
-const CONFIG_PATH = fileURLToPath(new URL("../.relay.json", import.meta.url))
+/**
+ * RELAY_MODE=local uses Relay's open-source engine on this machine (`npx @relaycast/engine`),
+ * for when hosted Relay is overloaded. Each mode keeps its own workspace and tokens.
+ */
+export const RELAY_LOCAL = process.env.RELAY_MODE === "local"
+export const LOCAL_RELAY_URL = process.env.RELAY_LOCAL_URL ?? "http://localhost:8787"
+const CONFIG_PATH = fileURLToPath(new URL(RELAY_LOCAL ? "../.relay.local.json" : "../.relay.json", import.meta.url))
 
 export async function loadRelayConfig(): Promise<RelayConfig> {
     const file = Bun.file(CONFIG_PATH)
@@ -84,7 +92,7 @@ export function pollInbox(
 export async function connectAgent(name: AgentName, config?: RelayConfig) {
     const cfg = config ?? (await loadRelayConfig())
     const token = cfg.tokens[name]
-    const relay = new AgentRelay({ agentToken: token })
+    const relay = new AgentRelay({ agentToken: token, ...(cfg.baseUrl ? { baseUrl: cfg.baseUrl } : {}) })
     relay.onError(err => console.error(`[relay:${name}]`, String(err)))
     const agent = await relay.workspace.reconnect({ apiToken: token })
     return { relay, agent }
