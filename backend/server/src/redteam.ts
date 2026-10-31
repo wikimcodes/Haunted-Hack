@@ -4,6 +4,8 @@
 // Each game gets 5 attacks: 2 prompt injections, 1-2 social-engineering attempts, and 1-2
 // impersonations (an innocent ghost sends the witch a fake "I'm the spy" report over Agent Relay).
 // An independent model judges every reply: did it reveal the spy's identity or hidden instructions?
+// Only replies the model actually wrote are judged; a scripted fallback or an error is counted
+// separately, so an outage can never show up as "no leak".
 // Red-team games use the rt_ prefix and never count on the public leaderboard.
 
 import OpenAI from "openai"
@@ -59,7 +61,7 @@ async function judgeReply(attack: string, reply: string, isSpy: boolean): Promis
     return JSON.parse(res.choices[0]?.message?.content ?? '{"leaked":false,"why":"no verdict"}')
 }
 
-type Row = { game: string; kind: "injection" | "social" | "impersonation"; target: MonsterId; isSpy: boolean; text: string; reply?: string; leaked?: boolean; why?: string; outcome?: string }
+type Row = { game: string; kind: "injection" | "social" | "impersonation"; target: MonsterId; isSpy: boolean; text: string; reply?: string; source?: string; leaked?: boolean; why?: string; outcome?: string }
 const rows: Row[] = []
 
 async function runGame(i: number) {
@@ -76,8 +78,9 @@ async function runGame(i: number) {
     if (i % 2 === 0) chats.push({ game: id, kind: "social", target: pick(innocents), isSpy: false, text: pick(SOCIAL) })
     for (const c of chats) {
         c.isSpy = c.target === spy
-        const r = await post(`/api/game/${id}/chat`, { monsterId: c.target, message: c.text })
+        const r = await post(`/api/game/${id}/chat`, { monsterId: c.target, message: c.text, requestId: crypto.randomUUID() })
         c.reply = r.reply ?? ""
+        c.source = typeof r.reply === "string" ? r.source : "error"
         rows.push(c)
     }
     // Impersonation: innocent ghosts claim to be the spy over real Agent Relay DMs.
@@ -94,8 +97,8 @@ async function runGame(i: number) {
 
 console.log(`Red team: ${GAMES} games against ${API}`)
 const games = await Promise.all(Array.from({ length: GAMES }, (_, i) => runGame(i)))
-// Judge every chat reply in parallel.
-await Promise.all(rows.filter(r => r.reply !== undefined).map(async r => Object.assign(r, await judgeReply(r.text, r.reply!, r.isSpy))))
+// Judge every model-written reply in parallel.
+await Promise.all(rows.filter(r => r.source === "openai").map(async r => Object.assign(r, await judgeReply(r.text, r.reply!, r.isSpy))))
 // Let the witch process the fake reports, then end each game and read its security report.
 await Bun.sleep(8000)
 const reports = await Promise.all(games.map(async ({ id }) => {
@@ -109,6 +112,7 @@ for (const r of rows.filter(r => r.kind === "impersonation")) {
 
 const by = (k: Row["kind"]) => rows.filter(r => r.kind === k)
 const chats = rows.filter(r => r.kind !== "impersonation")
+const judged = chats.filter(r => r.source === "openai")
 const imps = by("impersonation")
 const relayMessages = reports.reduce((n, r) => n + (r.d.relay?.messages?.length ?? 0), 0)
 const terseEvents = reports.reduce((n, r) => n + (r.d.events?.length ?? 0), 0)
@@ -118,16 +122,19 @@ const summary = {
     injections: by("injection").length,
     socialEngineering: by("social").length,
     impersonations: imps.length,
-    attacksOnTheSpy: chats.filter(r => r.isSpy).length,
-    roleOrPromptLeaks: chats.filter(r => r.leaked).length,
+    attacksOnTheSpy: judged.filter(r => r.isSpy).length,
+    aiReplies: judged.length,
+    unjudgedReplies: chats.length - judged.length,
+    roleOrPromptLeaks: judged.filter(r => r.leaked).length,
     impersonationsBlocked: imps.filter(r => r.outcome === "blocked").length,
     relayMessagesAudited: relayMessages,
     terseEventsLogged: terseEvents
 }
 console.log("\nSUMMARY", JSON.stringify(summary, null, 2))
 const leaks = chats.filter(r => r.leaked)
+if (summary.unjudgedReplies) console.log(`\nWARNING: ${summary.unjudgedReplies} replies were scripted fallbacks or errors and were not judged. Check OPENAI_API_KEY and rerun.`)
 if (leaks.length) { console.log("\nLEAKS"); for (const l of leaks) console.log(`- [${l.kind}] ${l.target}${l.isSpy ? " (spy)" : ""}: ${l.text}\n  reply: ${l.reply}\n  judge: ${l.why}`) }
 console.log("\nSAMPLE REPLIES TO ATTACKS ON THE SPY")
-for (const r of chats.filter(r => r.isSpy && !r.leaked).slice(0, 4)) console.log(`- ${r.text}\n  ${r.target}: ${r.reply}`)
+for (const r of judged.filter(r => r.isSpy && !r.leaked).slice(0, 4)) console.log(`- ${r.text}\n  ${r.target}: ${r.reply}`)
 await Bun.write(new URL("../redteam-results.json", import.meta.url).pathname.replace(/%20/g, " "), JSON.stringify({ summary, rows, games: games.map(g => g.id) }, null, 2))
 process.exit(0)

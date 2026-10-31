@@ -77,7 +77,8 @@ async function startGame(req: Request) {
     const gameMs = input.gameSeconds ? Math.min(Math.max(input.gameSeconds, 30), 900) * 1000 : GAME_MS
     const revealMs = input.revealSeconds ? Math.min(Math.max(input.revealSeconds, 10), 300) * 1000 : REVEAL_MS
     const state = await game(sessionId).start({ gameMs, revealMs })
-    await actors.Lobby.get("main").add(sessionId).catch(err => console.error("[lobby]", String(err)))
+    // Red-team games stay out of the recent list too, so a run never pushes real games off it.
+    if (!input.redteam) await actors.Lobby.get("main").add(sessionId).catch(err => console.error("[lobby]", String(err)))
     return json(state, 201)
 }
 
