@@ -27,6 +27,8 @@ Or run `zsh backend/set-keys.sh` once. It asks for the OpenAI and Terse keys wit
 | `TERSE_ACTOR_URL` | local dev server | Deployed Terse actors, e.g. `https://api.useterse.ai/<project-id>/actors`. Leave unset for local `terse actor dev`. |
 | `TERSE_API_KEY` | none | Required together with `TERSE_ACTOR_URL`. |
 | `TERSE_ACTOR_SETUP_TIMEOUT_MS` | SDK default | Optional grant-request timeout for the generated Terse client (1000–600000). |
+| `RELAY_MODE` | hosted | `local` points setup, the server and agents at a self-hosted Relay engine instead of hosted Agent Relay. |
+| `RELAY_LOCAL_URL` | `http://localhost:8787` | Address of that local engine. |
 
 The generated client reads `TERSE_ACTOR_URL` and `TERSE_API_KEY` at runtime, so changing them needs only a server restart. Run `terse actor generate` in `backend/server` again only after changing actor methods.
 
@@ -36,9 +38,13 @@ The generated client reads `TERSE_ACTOR_URL` and `TERSE_API_KEY` at runtime, so 
 LOCAL=1 bun demo.ts
 ```
 
+`RELAY=local bun demo.ts` starts the open-source Relay engine (`npx @relaycast/engine`) on port 8787 and sets `RELAY_MODE=local` for everything it launches. Use it when hosted Relay is slow or overloaded. When starting processes by hand, set `RELAY_MODE=local` on each of them yourself.
+
 ### Agent Relay credentials
 
 Relay tokens do not go in `.env`. `bun run setup:relay` creates the workspace and agents and saves their tokens to `backend/server/.relay.json` (gitignored). If setup is interrupted, its progress is kept in `.relay-setup.json` so a rerun resumes from there.
+
+Local mode keeps a separate workspace in `.relay.local.json`, with progress in `.relay-setup.local.json`. The engine's own data lives in `backend/relay-local/`. All of these are gitignored.
 
 ## Frontend: `frontend-game/.env.local`
 

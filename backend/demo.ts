@@ -1,5 +1,6 @@
 // One command for the whole backend: Terse actors, game server and the four Relay agents.
-// Usage (from backend/): bun demo.ts
+// Usage (from backend/): bun demo.ts            hosted Agent Relay
+//                        RELAY=local bun demo.ts local Relay engine (if hosted Relay is overloaded)
 // Ctrl+C stops everything.
 
 import { fileURLToPath } from "node:url"
@@ -10,7 +11,7 @@ const SERVER_DIR = here("./server")
 
 type Proc = { name: string; proc: Bun.Subprocess }
 const procs: Proc[] = []
-const colors: Record<string, string> = { terse: "35", server: "36", agents: "33" }
+const colors: Record<string, string> = { terse: "35", server: "36", agents: "33", relay: "32" }
 
 function run(name: string, cmd: string[], cwd: string, env: Record<string, string | undefined> = process.env): Proc {
     const proc = Bun.spawn(cmd, { cwd, stdout: "pipe", stderr: "pipe", env })
@@ -48,10 +49,19 @@ function stopAll() {
 process.on("SIGINT", stopAll)
 process.on("SIGTERM", stopAll)
 
-const relayConfig = Bun.file(here("./server/.relay.json"))
+// RELAY=local runs Relay's open-source engine on this machine (fallback when hosted Relay is overloaded).
+const relayLocal = process.env.RELAY === "local"
+if (relayLocal) {
+    process.env.RELAY_MODE = "local"
+    const dir = here("./relay-local")
+    await Bun.$`mkdir -p ${dir}`.quiet()
+    run("relay", ["npx", "-y", "@relaycast/engine", "--db", "./relaycast.db", "--port", "8787"], dir)
+    await waitFor("http://localhost:8787/health", "Local Relay engine", 120_000)
+}
+const relayConfig = Bun.file(here(relayLocal ? "./server/.relay.local.json" : "./server/.relay.json"))
 if (!(await relayConfig.exists())) {
-    console.log("No Relay workspace yet, creating one...")
-    const setup = Bun.spawnSync(["bun", "src/setupRelay.ts"], { cwd: SERVER_DIR, stdout: "inherit", stderr: "inherit" })
+    console.log(`No ${relayLocal ? "local" : "hosted"} Relay workspace yet, creating one...`)
+    const setup = Bun.spawnSync(["bun", "src/setupRelay.ts"], { cwd: SERVER_DIR, stdout: "inherit", stderr: "inherit", env: process.env })
     if (setup.exitCode !== 0) process.exit(1)
 }
 
@@ -75,7 +85,7 @@ await waitFor("http://localhost:3001/health", "Game server")
 run("agents", ["bun", "src/agents/runAll.ts"], SERVER_DIR, childEnv)
 
 console.log(`
-  Spy Monster backend is up ${deployed ? `(actors on Terse cloud: ${deployedUrl})` : "(local Terse)"}
+  Spy Monster backend is up ${deployed ? `(actors on Terse cloud: ${deployedUrl})` : "(local Terse)"}, ${relayLocal ? "local Relay engine" : "hosted Agent Relay"}
   API            http://localhost:3001
   Director View  http://localhost:3001/director
   Ctrl+C to stop everything.

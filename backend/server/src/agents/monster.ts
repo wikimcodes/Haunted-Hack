@@ -61,9 +61,16 @@ async function maybeGossip(sessionId: string, factIds: string[], texts: string[]
     await Bun.sleep(1500 + Math.random() * 3000)
     const text = GOSSIP_LINES[self](texts[0]!)
     const meta: RelayMeta = { kind: "gossip", sessionId, gossipId: reservation.gossipId, factIds }
-    const sent = await withRelayRetry("gossip", () =>
-        agent.sendMessage({ to: `@${to}`, text, metadata: meta, idempotencyKey: `gossip-${sessionId}-${reservation.gossipId}` })
-    )
+    let sent
+    try {
+        sent = await withRelayRetry("gossip", () =>
+            agent.sendMessage({ to: `@${to}`, text, metadata: meta, idempotencyKey: `gossip-${sessionId}-${reservation.gossipId}` })
+        )
+    } catch (err) {
+        // Nothing was delivered: give the round's whisper back instead of burning it.
+        await g.releaseGossip(reservation.gossipId).catch(() => {})
+        throw err
+    }
     await g.confirmGossip(reservation.gossipId, sent.id, text)
     log(`gossiped ${factIds.join(",")} to ${MONSTER_NAMES[to]} (${sent.id})`)
 }

@@ -7,8 +7,12 @@ import type { ChatLine, Cue, MonsterId, PublicGameState } from "./types"
 export interface GameSnapshot {
     state: PublicGameState | null
     connected: boolean
-    /** Monster currently waiting on a reply, if any. */
+    /** Monsters currently working on a reply. */
+    waiting: MonsterId[]
+    /** First monster still replying, if any (kept for simple UIs). */
     waitingFor: MonsterId | null
+    /** Server clock minus this device's clock, so countdowns stay right on a phone whose clock is off. */
+    clockOffsetMs: number
     chat: ChatLine[]
     error: string | null
 }
@@ -20,7 +24,7 @@ const STORAGE_KEY = "spy-monster-session"
 
 export class GameConnection {
     readonly api: GameApi
-    #snapshot: GameSnapshot = { state: null, connected: false, waitingFor: null, chat: [], error: null }
+    #snapshot: GameSnapshot = { state: null, connected: false, waiting: [], waitingFor: null, clockOffsetMs: 0, chat: [], error: null }
     #listeners = new Set<Listener>()
     #cueListeners = new Set<CueListener>()
     #socket: WebSocket | null = null
@@ -32,7 +36,11 @@ export class GameConnection {
     #retryTimer: ReturnType<typeof setTimeout> | null = null
 
     constructor(apiUrl: string) {
-        this.api = createGameApi(apiUrl)
+        this.api = createGameApi(apiUrl, {
+            onServerTime: offset => {
+                if (Math.abs(offset - this.#snapshot.clockOffsetMs) > 250) this.#set({ clockOffsetMs: Math.round(offset) })
+            }
+        })
     }
 
     // ----- subscriptions (useSyncExternalStore-compatible) -----------------
@@ -87,23 +95,35 @@ export class GameConnection {
         }
     }
 
-    async chat(monsterId: MonsterId, message: string): Promise<void> {
+    /**
+     * Sends a message to one monster. Different monsters can be asked at the same time;
+     * a second message to a monster that is still replying is refused (returns false, sets error).
+     */
+    async chat(monsterId: MonsterId, message: string): Promise<boolean> {
         const sessionId = this.#sessionId
         const generation = this.#generation
-        if (this.#closed || !sessionId || this.#snapshot.waitingFor) return
-        const now = Date.now()
-        const playerLine: ChatLine = { id: crypto.randomUUID(), monsterId, role: "player", text: message, at: now }
-        this.#pushChat(playerLine)
-        this.#set({ waitingFor: monsterId, error: null })
+        if (this.#closed || !sessionId) return false
+        if (this.#snapshot.waiting.includes(monsterId)) {
+            this.#set({ error: "still_replying" })
+            return false
+        }
+        this.#pushChat({ id: crypto.randomUUID(), monsterId, role: "player", text: message, at: Date.now() })
+        this.#setWaiting([...this.#snapshot.waiting, monsterId], { error: null })
         try {
             const result = await this.api.chat(sessionId, monsterId, message)
-            if (!this.#isCurrent(generation, sessionId)) return
+            if (!this.#isCurrent(generation, sessionId)) return false
             this.#pushChat({ id: crypto.randomUUID(), monsterId, role: "monster", text: result.reply, at: Date.now() })
-            this.#set({ waitingFor: null })
+            this.#setWaiting(this.#snapshot.waiting.filter(m => m !== monsterId))
+            return true
         } catch (err) {
-            if (!this.#isCurrent(generation, sessionId)) return
-            this.#set({ waitingFor: null, error: (err as Error).message })
+            if (!this.#isCurrent(generation, sessionId)) return false
+            this.#setWaiting(this.#snapshot.waiting.filter(m => m !== monsterId), { error: (err as Error).message })
+            return false
         }
+    }
+
+    #setWaiting(waiting: MonsterId[], extra: Partial<GameSnapshot> = {}): void {
+        this.#set({ ...extra, waiting, waitingFor: waiting[0] ?? null })
     }
 
     async accuse(monsterId: MonsterId): Promise<PublicGameState | null> {
@@ -134,7 +154,7 @@ export class GameConnection {
         this.#closed = true
         this.#generation++
         this.#cancelSocket()
-        this.#set({ connected: false, waitingFor: null })
+        this.#setWaiting([], { connected: false })
     }
 
     // ----- WebSocket ---------------------------------------------------------
@@ -149,7 +169,7 @@ export class GameConnection {
         this.#sessionId = null
         this.#retryMs = 500
         this.#cancelSocket()
-        this.#set({ connected: false, waitingFor: null })
+        this.#setWaiting([], { connected: false })
         return this.#generation
     }
 

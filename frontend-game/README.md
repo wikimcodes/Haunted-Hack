@@ -82,8 +82,8 @@ The existing `src/index.ts` exports remain usable independently of the rendered 
 | `state` | Public world state, moods, clues and outcome; `spyId` stays null during play |
 | `messages` | Local conversation history |
 | `chat(id, text)` | Send a message, up to the server's 300-character limit |
-| `waitingFor`, `error` | Pending reply and latest chat error |
-| `secondsLeft`, `secondsToReveal` | Countdown displays derived from server deadlines |
+| `waiting`, `waitingFor`, `error` | Spirits still replying (different spirits can reply at once), the first of them, and the latest chat error (`still_replying` when messaging a busy spirit) |
+| `secondsLeft`, `secondsToReveal` | Countdown displays derived from server deadlines, corrected for the device's clock |
 | `connected` | Current live socket status |
 | `start()`, `accuse(id)` | Server-controlled game actions |
 | `useCue(handler)` | Subscribe to backend animation cues; call unconditionally in the component |
