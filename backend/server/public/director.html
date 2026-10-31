@@ -128,7 +128,7 @@ const picker = document.getElementById("picker")
 let current = new URLSearchParams(location.search).get("game")
 let pollTimer = null
 let clockTimer = null
-const live = { game: null, since: null, rows: [], seen: new Set() }
+const live = { game: null, since: null, rows: [], seen: new Set(), board: null, boardAt: 0 }
 
 // ---------- tiny DOM helper (always textContent, never innerHTML for data) ----------
 function el(tag, attrs = {}, ...children) {
@@ -214,6 +214,8 @@ async function renderLocked() {
     el("div", { class: "sub" }, state ? `Round ${state.round} · ${state.clues.length} clue${state.clues.length === 1 ? "" : "s"} revealed` : ""),
     feed
   ))
+  if (!live.board || Date.now() - live.boardAt > 15000) { live.board = await leaderboardPanel("span-12"); live.boardAt = Date.now() }
+  if (live.board) root.append(el("div", { style: "margin-top:16px" }, live.board.cloneNode(true)))
   if (state) clockTimer = setInterval(() => { clock.textContent = clockOf(state.deadlineAt - Date.now()) }, 500)
   pollTimer = setTimeout(show, 2000)
 }
@@ -334,7 +336,29 @@ function render(v) {
     timeline
   )
 
-  root.replaceChildren(el("div", { class: "grid" }, outcome, graph, relayPanel, cluesPanel, timelinePanel))
+  const grid = el("div", { class: "grid" }, outcome, graph, relayPanel, cluesPanel, timelinePanel)
+  root.replaceChildren(grid)
+  leaderboardPanel("span-12").then(panel => { if (panel && grid.isConnected) grid.append(panel) })
+}
+
+// ---------- all games (Supabase) ----------
+async function leaderboardPanel(spanClass) {
+  const lb = await getJSON("/api/leaderboard").catch(() => null)
+  if (!lb || lb.disabled || !lb.totals) return null
+  const t = lb.totals
+  const top = lb.monsters[0]
+  return el("section", { class: `panel ${spanClass}` },
+    el("h2", {}, "All games"),
+    el("p", { class: "sub" }, "Every finished game is archived to Supabase Postgres; live games stay in Terse actors."),
+    el("div", { class: "stats" },
+      stat("Games played", String(t.games)),
+      stat("Players escaped", t.escape_rate_pct === null ? "-" : `${t.escape_rate_pct}%`, "won"),
+      stat("Fastest catch", t.fastest_catch_seconds === null ? "-" : clockOf(t.fastest_catch_seconds * 1000)),
+      stat("Most deceptive", top ? `${name(top.monster)} (${top.got_away_pct ?? 0}%)` : "-", "lost"),
+      stat("Whispers sent", String(t.total_whispers)),
+      stat("Fakes blocked", String(t.total_fakes_blocked))
+    )
+  )
 }
 
 function stat(label, value, cls) {
