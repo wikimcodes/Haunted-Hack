@@ -23,8 +23,8 @@ export function createGameApi(
         try {
             const res = await fetch(base + path, {
                 method,
-                headers: body === undefined ? undefined : { "content-type": "application/json" },
-                body: body === undefined ? undefined : JSON.stringify(body),
+                headers: body === undefined ? undefined : { "content-type": body instanceof Blob ? body.type || "audio/webm" : "application/json" },
+                body: body === undefined ? undefined : body instanceof Blob ? body : JSON.stringify(body),
                 signal: controller.signal
             })
             // Server clock minus this device's clock. The server stamps the time as it sends the response,
@@ -56,6 +56,9 @@ export function createGameApi(
             request<{ websocketUrl: string }>("POST", `${gamePath(sessionId)}/socket`, { role }),
         director: (sessionId: string) => request<unknown>("GET", `${gamePath(sessionId)}/director`),
         /** MP3 of the witch speaking a revealed clue. */
+        /** The player's recorded question -> text, which is then sent with `chat`. */
+        transcribe: (sessionId: string, audio: Blob) =>
+            request<{ text: string }>("POST", `${gamePath(sessionId)}/transcribe`, audio, options.chatTimeoutMs ?? 45_000),
         voiceUrl: (sessionId: string, clueId: string) => `${base}${gamePath(sessionId)}/voice/${encodeURIComponent(clueId)}`,
         /** MP3 of a ghost speaking its reply to the chat sent with this requestId (only if it asked for a voice). */
         replyVoiceUrl: (sessionId: string, requestId: string) => `${base}${gamePath(sessionId)}/reply-voice/${encodeURIComponent(requestId)}`

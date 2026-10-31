@@ -9,3 +9,4 @@ relay-local/
 server/.relay-setup.json
 server/.relay-setup.local.json
 server/.relay*.tmp
+server/.certs/
