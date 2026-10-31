@@ -1,10 +1,14 @@
 // Game API server. Players talk to this over HTTP; live state comes from the Terse WebSocket.
 // The server never holds game state itself: GameActor and MonsterActor are the source of truth.
 
+import { normalize, resolve, sep } from "node:path"
 import { fileURLToPath } from "node:url"
 
+import QRCode from "qrcode"
+
 import { actors } from "../generated/index.js"
-import { monsterReply } from "./llm"
+import { archiveGame, leaderboard, startArchiver } from "./archive"
+import { monsterReply, witchSpeech } from "./llm"
 import { connectAgent, loadRelayConfig, withRelayRetry } from "./relayConfig"
 import { MONSTER_IDS, MONSTER_NAMES, isMonsterId, type MonsterId, type RelayMeta } from "./types"
 
@@ -15,6 +19,7 @@ const MAX_MESSAGE_CHARS = 300
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN ?? "*"
 
 const relayConfig = await loadRelayConfig()
+const RELAY_MODE = relayConfig.baseUrl ? "local" : "hosted"
 const { agent: gamemaster } = await connectAgent("gamemaster", relayConfig)
 
 const game = (sessionId: string) => actors.GameActor.get(sessionId)
@@ -39,7 +44,10 @@ function json(body: unknown, status = 200): Response {
             "content-type": "application/json",
             "access-control-allow-origin": ALLOWED_ORIGIN,
             "access-control-allow-headers": "content-type",
-            "access-control-allow-methods": "GET,POST,OPTIONS"
+            "access-control-allow-methods": "GET,POST,OPTIONS",
+            "access-control-expose-headers": "x-server-time",
+            // Lets clients correct for a phone clock that is off when showing the countdown.
+            "x-server-time": String(Date.now())
         }
     })
 }
@@ -80,7 +88,11 @@ async function chat(req: Request, sessionId: string) {
     if (!chatResults.has(key)) {
         const run = runChat(sessionId, input.monsterId, text, requestId)
         chatResults.set(key, run)
-        run.catch(() => chatResults.delete(key))
+        // Keep a finished reply long enough to answer retries, then forget it.
+        run.then(
+            () => setTimeout(() => chatResults.delete(key), 60_000),
+            () => chatResults.delete(key)
+        )
     }
     return json(await chatResults.get(key))
 }
@@ -103,14 +115,17 @@ async function runChat(sessionId: string, monsterId: MonsterId, text: string, re
         otherNames: MONSTER_IDS.filter(id => id !== monsterId).map(id => MONSTER_NAMES[id])
     })
     await monster(sessionId, monsterId).rememberExchange(text, answer.reply)
-    await g.setMonsterMood(monsterId, answer.nervous ? "nervous" : "talking")
-    setTimeout(() => void g.setMonsterMood(monsterId, "idle").catch(() => {}), 4000)
+    const mood = answer.nervous ? "nervous" : "talking"
+    await g.setMonsterMood(monsterId, mood)
+    setTimeout(() => void g.settleMood(monsterId, mood).catch(() => {}), 4000)
 
     // Hand the new fact to that monster's own agent process over Relay.
     const meta: RelayMeta = { kind: "heard", sessionId, factId: fact.id }
     withRelayRetry("heard", () =>
         gamemaster.sendMessage({ to: `@${monsterId}`, text: `The human told you: "${fact.text}"`, metadata: meta, idempotencyKey: `heard-${sessionId}-${requestId}` })
-    ).catch(err => console.error("[chat] relay handoff failed:", String(err)))
+    )
+        .then(sent => g.recordHandoff(sent.id))
+        .catch(err => console.error("[chat] relay handoff failed:", String(err)))
 
     return { monsterId, reply: answer.reply, factId: fact.id, source: answer.source }
 }
@@ -120,6 +135,8 @@ async function accuse(req: Request, sessionId: string) {
     if (!isMonsterId(input.monsterId)) throw new HttpError(400, "unknown_monster")
     await requireGame(sessionId)
     const state = await game(sessionId).accuse(input.monsterId)
+    // Archive straight away so the leaderboard updates the moment the game ends.
+    archiveGame(sessionId, RELAY_MODE).catch(err => console.warn("[archive]", sessionId, String(err).slice(0, 160)))
     return json({ outcome: state.phase, state })
 }
 
@@ -158,6 +175,28 @@ async function director(sessionId: string) {
     return json({ ...view, relay: { workspace: relayConfig.workspaceName, messages: relayMessages } })
 }
 
+// The witch speaks each revealed clue aloud. Only clues already in the public state can be voiced,
+// so this never leaks anything. Each clue is generated once and cached.
+const voiceCache = new Map<string, Promise<ArrayBuffer | null>>()
+
+async function witchVoice(sessionId: string, clueId: string) {
+    const state = await requireGame(sessionId)
+    const clue = state.clues.find(c => c.id === clueId)
+    if (!clue) throw new HttpError(404, "clue_not_revealed")
+    const key = `${sessionId}:${clueId}`
+    if (!voiceCache.has(key)) {
+        const audio = witchSpeech(clue.content)
+        voiceCache.set(key, audio)
+        audio.then(a => !a && voiceCache.delete(key))
+        if (voiceCache.size > 500) voiceCache.delete(voiceCache.keys().next().value!)
+    }
+    const audio = await voiceCache.get(key)
+    if (!audio) throw new HttpError(503, "voice_unavailable")
+    return new Response(audio, {
+        headers: { "content-type": "audio/mpeg", "cache-control": "public, max-age=86400", "access-control-allow-origin": ALLOWED_ORIGIN }
+    })
+}
+
 async function recentGames() {
     const recent = await actors.Lobby.get("main").list()
     const games = await Promise.all(
@@ -171,7 +210,11 @@ async function recentGames() {
 
 // Live Relay feed for the Director screen, read from Relay's durable workspace event log.
 // While the game runs, sender and text are hidden so the screen cannot give the spy away.
-const RELAY_API = relayConfig.workspaceKey.startsWith("rk_") ? "https://cast.agentrelay.com/v1" : "https://armadillo.agentrelay.com/v1"
+const RELAY_API = relayConfig.baseUrl
+    ? `${relayConfig.baseUrl.replace(/\/$/, "")}/v1`
+    : relayConfig.workspaceKey.startsWith("rk_")
+      ? "https://cast.agentrelay.com/v1"
+      : "https://armadillo.agentrelay.com/v1"
 
 interface RelayLogEvent {
     seq: number
@@ -199,14 +242,18 @@ async function relayLive(req: Request, sessionId: string) {
         const { latestSeq } = await relayEvents()
         since = Math.max(0, latestSeq - 100)
     }
-    const { events, latestSeq } = await relayEvents(since)
+    const [{ events, latestSeq }, ownIds] = await Promise.all([relayEvents(since), game(sessionId).relayMessageIds()])
+    const mine = new Set(ownIds)
     const playing = state.phase === "playing"
     const from = state.startedAt - 2000
-    const until = playing ? Infinity : (state.clues.at(-1)?.revealedAt ?? state.deadlineAt) + 15_000
-    const rows = events
-        .filter(e => e.type === "dm.received" && e.payload?.message?.id)
-        .map(e => ({ e, at: Date.parse(e.created_at) }))
-        .filter(({ at }) => at >= from && at <= until)
+    const recent = Date.now() - 20_000
+    const dms = events.filter(e => e.type === "dm.received" && e.payload?.message?.id).map(e => ({ e, at: Date.parse(e.created_at) }))
+    // A message is linked to this game only once its sender records it, so the cursor must not move
+    // past recent unlinked messages: they may turn out to belong to this game a moment later.
+    const pending = dms.filter(({ e, at }) => !mine.has(e.payload!.message!.id!) && at >= recent)
+    const nextSince = pending.length ? Math.min(...pending.map(({ e }) => e.seq)) - 1 : Math.max(latestSeq, since)
+    const rows = dms
+        .filter(({ e, at }) => at >= from && mine.has(e.payload!.message!.id!))
         .map(({ e, at }) => {
             const m = e.payload!.message!
             const sender = m.agent_name ?? "?"
@@ -221,7 +268,7 @@ async function relayLive(req: Request, sessionId: string) {
                 length: (m.text ?? "").length
             }
         })
-    return json({ phase: state.phase, nextSince: Math.max(latestSeq, since), events: rows })
+    return json({ phase: state.phase, nextSince, events: rows })
 }
 
 // ----- local Terse socket relay ------------------------------------------------
@@ -244,6 +291,35 @@ function publicSocketUrl(req: Request, websocketUrl: string): string {
 
 type RelaySocketData = { to: string; upstream?: WebSocket; queue: (string | Buffer)[] }
 
+// ----- the website and its QR code ----------------------------------------------
+// The built frontend (frontend-game/dist, built with VITE_API_URL=/) is served from this same
+// origin, so one public link covers the game and the API, and a QR code can point at it.
+
+const WEB_DIST = fileURLToPath(new URL("../../../frontend-game/dist/", import.meta.url))
+
+async function serveWeb(pathname: string): Promise<Response | null> {
+    const index = Bun.file(resolve(WEB_DIST, "index.html"))
+    if (!(await index.exists())) return null
+    const target = resolve(WEB_DIST, "." + normalize(decodeURIComponent(pathname)))
+    if (target.startsWith(WEB_DIST.replace(/\/$/, "") + sep) || target === WEB_DIST.replace(/\/$/, "")) {
+        const file = Bun.file(target)
+        if (pathname !== "/" && (await file.exists())) {
+            const cache = pathname.startsWith("/assets/") ? "public, max-age=3600" : "no-cache"
+            return new Response(file, { headers: { "cache-control": cache } })
+        }
+    }
+    // Single-page app: unknown paths (e.g. /?game=…) get the app shell.
+    return new Response(index, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } })
+}
+
+/** PNG QR code for a link to this game (the Director screen passes its own public origin). */
+async function qrCode(req: Request) {
+    const url = new URL(req.url).searchParams.get("url") ?? ""
+    if (!/^https?:\/\/[^\s]{3,200}$/.test(url)) throw new HttpError(400, "bad_url")
+    const png = await QRCode.toBuffer(url, { width: 512, margin: 2, color: { dark: "#101525", light: "#ffffff" } })
+    return new Response(new Uint8Array(png), { headers: { "content-type": "image/png", "cache-control": "no-store" } })
+}
+
 const DIRECTOR_PAGE = fileURLToPath(new URL("../public/director.html", import.meta.url))
 const DIRECTOR_ASSETS: Record<string, { path: string; type: string }> = Object.fromEntries([
     ["director.css", "text/css; charset=utf-8"],
@@ -255,7 +331,7 @@ const DIRECTOR_ASSETS: Record<string, { path: string; type: string }> = Object.f
 // ----- router ----------------------------------------------------------------
 
 const routes: [string, RegExp, (req: Request, m: RegExpMatchArray) => Promise<Response>][] = [
-    ["GET", /^\/health$/, async () => json({ ok: true, relayWorkspace: relayConfig.workspaceName })],
+    ["GET", /^\/health$/, async () => json({ ok: true, relayWorkspace: relayConfig.workspaceName, relay: relayConfig.baseUrl ? "local" : "hosted" })],
     ["GET", /^\/director\/?$/, async () => new Response(Bun.file(DIRECTOR_PAGE), { headers: { "content-type": "text/html; charset=utf-8" } })],
     ["GET", /^\/(director\.(?:css|js)|director-model\.mjs)$/, async (_req, match) => {
         const asset = DIRECTOR_ASSETS[match[1]!]!
@@ -266,13 +342,16 @@ const routes: [string, RegExp, (req: Request, m: RegExpMatchArray) => Promise<Re
         return new Response(Bun.file(portrait), { headers: { "content-type": "image/png", "cache-control": "no-cache" } })
     }],
     ["GET", /^\/api\/games\/recent$/, () => recentGames()],
+    ["GET", /^\/api\/qr$/, req => qrCode(req)],
+    ["GET", /^\/api\/leaderboard$/, async () => json((await leaderboard()) ?? { disabled: true })],
     ["POST", /^\/api\/game\/start$/, req => startGame(req)],
     ["GET", /^\/api\/game\/([\w-]+)$/, async (_req, m) => json(await requireGame(m[1]!))],
     ["POST", /^\/api\/game\/([\w-]+)\/chat$/, (req, m) => chat(req, m[1]!)],
     ["POST", /^\/api\/game\/([\w-]+)\/accuse$/, (req, m) => accuse(req, m[1]!)],
     ["POST", /^\/api\/game\/([\w-]+)\/socket$/, (req, m) => socket(req, m[1]!)],
     ["GET", /^\/api\/game\/([\w-]+)\/director$/, (_req, m) => director(m[1]!)],
-    ["GET", /^\/api\/game\/([\w-]+)\/relay-live$/, (req, m) => relayLive(req, m[1]!)]
+    ["GET", /^\/api\/game\/([\w-]+)\/relay-live$/, (req, m) => relayLive(req, m[1]!)],
+    ["GET", /^\/api\/game\/([\w-]+)\/voice\/([\w-]+)$/, (_req, m) => witchVoice(m[1]!, m[2]!)]
 ]
 
 Bun.serve<RelaySocketData>({
@@ -312,14 +391,20 @@ Bun.serve<RelaySocketData>({
                 } catch (err) {
                     if (err instanceof HttpError) return json({ error: err.message }, err.status)
                     const message = String((err as Error)?.message ?? err)
-                    if (/game_over|game_not_started|unknown_monster/.test(message)) return json({ error: message.match(/game_over|game_not_started|unknown_monster/)![0] }, 409)
+                    const known = message.match(/game_over|game_not_started|unknown_monster|too_many_messages/)
+                    if (known) return json({ error: known[0] }, 409)
                     console.error(`[${method} ${pathname}]`, err)
                     return json({ error: "internal_error" }, 500)
                 }
             }
         }
+        if ((req.method === "GET" || req.method === "HEAD") && !pathname.startsWith("/api/")) {
+            const page = await serveWeb(pathname)
+            if (page) return page
+        }
         return json({ error: "not_found" }, 404)
     }
 })
 
-console.log(`Spy Monster server on http://localhost:${PORT} (Relay workspace ${relayConfig.workspaceName})`)
+console.log(`Spy Monster server on http://localhost:${PORT} (${relayConfig.baseUrl ? "local" : "hosted"} Relay workspace ${relayConfig.workspaceName})`)
+startArchiver(RELAY_MODE)

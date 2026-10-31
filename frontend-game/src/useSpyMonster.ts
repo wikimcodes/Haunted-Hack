@@ -14,10 +14,13 @@ export interface UseSpyMonsterOptions {
     apiUrl: string
     /** Rejoin the last game (or ?game=<id>) on load. Default true. */
     autoResume?: boolean
+    /** Speak each new witch clue aloud (OpenAI text-to-speech). Default true. */
+    witchVoice?: boolean
 }
 
-export function useSpyMonster({ apiUrl, autoResume = true }: UseSpyMonsterOptions) {
-    const connection = useMemo(() => new GameConnection(apiUrl), [apiUrl])
+export function useSpyMonster({ apiUrl, autoResume = true, witchVoice = true }: UseSpyMonsterOptions) {
+    const connection = useMemo(() => new GameConnection(apiUrl, { witchVoice }), [apiUrl])
+    useEffect(() => connection.setWitchVoice(witchVoice), [connection, witchVoice])
     const snapshot = useSyncExternalStore(connection.subscribe, connection.getSnapshot, connection.getSnapshot)
     const now = useNow(snapshot.state?.phase === "playing")
 
@@ -27,20 +30,23 @@ export function useSpyMonster({ apiUrl, autoResume = true }: UseSpyMonsterOption
     }, [connection, autoResume])
 
     const state = snapshot.state
+    const serverNow = now + snapshot.clockOffsetMs
     return {
         ...snapshot,
         /** Conversation history. `chat` below is the sending action. */
         messages: snapshot.chat,
         /** Whole seconds until dawn, from the server's deadline. */
-        secondsLeft: state ? Math.max(0, Math.ceil((state.deadlineAt - now) / 1000)) : null,
+        secondsLeft: state ? Math.max(0, Math.ceil((state.deadlineAt - serverNow) / 1000)) : null,
         /** Whole seconds until the witch's next reveal, or null if none is left. */
-        secondsToReveal: state?.nextRevealAt ? Math.max(0, Math.ceil((state.nextRevealAt - now) / 1000)) : null,
+        secondsToReveal: state?.nextRevealAt ? Math.max(0, Math.ceil((state.nextRevealAt - serverNow) / 1000)) : null,
         isOver: state ? state.phase !== "playing" : false,
         start: (options?: { gameSeconds?: number; revealSeconds?: number }) => connection.start(options),
         chat: (monsterId: MonsterId, message: string) => connection.chat(monsterId, message),
         accuse: (monsterId: MonsterId) => connection.accuse(monsterId),
         director: () => connection.director(),
         shareUrl: () => connection.shareUrl(),
+        /** MP3 URL of the witch speaking a revealed clue, for custom audio handling. */
+        witchVoiceUrl: (clueId: string) => (state ? connection.api.voiceUrl(state.sessionId, clueId) : null),
         /** Subscribe to animation cues for the lifetime of the calling component. */
         useCue: (handler: (cue: Cue) => void) => useCueListener(connection, handler)
     }

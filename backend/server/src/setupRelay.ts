@@ -5,10 +5,11 @@ import { open, readFile, rename, unlink } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
 
 import { AgentRelay } from "@agent-relay/sdk"
-import { AGENT_NAMES, withRelayRetry, type AgentName, type RelayConfig } from "./relayConfig"
+import { AGENT_NAMES, LOCAL_RELAY_URL, RELAY_LOCAL, withRelayRetry, type AgentName, type RelayConfig } from "./relayConfig"
 
-const CONFIG_PATH = fileURLToPath(new URL("../.relay.json", import.meta.url))
-const CHECKPOINT_PATH = fileURLToPath(new URL("../.relay-setup.json", import.meta.url))
+// RELAY_MODE=local keeps its own workspace, tokens and checkpoint next to the hosted ones.
+const CONFIG_PATH = fileURLToPath(new URL(RELAY_LOCAL ? "../.relay.local.json" : "../.relay.json", import.meta.url))
+const CHECKPOINT_PATH = fileURLToPath(new URL(RELAY_LOCAL ? "../.relay-setup.local.json" : "../.relay-setup.json", import.meta.url))
 
 type Checkpoint = {
     version: 1
@@ -22,6 +23,8 @@ type BootstrapRelay = {
 }
 type SetupOptions = {
     force?: boolean
+    /** Self-hosted Relay engine; hosted Relay when absent. */
+    baseUrl?: string
     configPath?: string
     checkpointPath?: string
     createWorkspace?: (name: string) => Promise<BootstrapRelay>
@@ -64,6 +67,7 @@ export async function setupRelay(options: SetupOptions = {}): Promise<void> {
     const configPath = options.configPath ?? CONFIG_PATH
     const checkpointPath = options.checkpointPath ?? CHECKPOINT_PATH
     const retry = options.retry ?? withRelayRetry
+    const baseUrl = "baseUrl" in options ? options.baseUrl : RELAY_LOCAL ? LOCAL_RELAY_URL : undefined
     const existing = await readJson(configPath)
     if (existing && !options.force) {
         console.log("Relay already set up. Pass --force to replace it after a new setup succeeds.")
@@ -78,11 +82,11 @@ export async function setupRelay(options: SetupOptions = {}): Promise<void> {
     await savePrivate(checkpointPath, checkpoint)
     let relay: BootstrapRelay
     if (checkpoint.workspaceKey) {
-        relay = options.resumeWorkspace?.(checkpoint.workspaceKey) ?? new AgentRelay({ workspaceKey: checkpoint.workspaceKey })
+        relay = options.resumeWorkspace?.(checkpoint.workspaceKey) ?? new AgentRelay({ workspaceKey: checkpoint.workspaceKey, ...(baseUrl ? { baseUrl } : {}) })
         console.log(`Resuming Relay setup (${Object.keys(checkpoint.tokens).length}/${AGENT_NAMES.length} agents saved).`)
     } else {
         relay = await retry("create workspace", () => options.createWorkspace?.(checkpoint.workspaceName)
-            ?? AgentRelay.createWorkspace({ name: checkpoint.workspaceName }))
+            ?? AgentRelay.createWorkspace({ name: checkpoint.workspaceName, ...(baseUrl ? { baseUrl } : {}) }))
         if (!relay.workspaceKey) throw new Error("Relay did not return a workspace key; setup checkpoint retained.")
         checkpoint.workspaceKey = relay.workspaceKey
         await savePrivate(checkpointPath, checkpoint)
@@ -102,12 +106,13 @@ export async function setupRelay(options: SetupOptions = {}): Promise<void> {
     const complete: RelayConfig = {
         workspaceName: checkpoint.workspaceName,
         workspaceKey: checkpoint.workspaceKey!,
-        tokens: checkpoint.tokens as Record<AgentName, string>
+        tokens: checkpoint.tokens as Record<AgentName, string>,
+        ...(baseUrl ? { baseUrl } : {})
     }
     await savePrivate(configPath, complete)
     // Only completed setup removes its checkpoint. Failed attempts retain all tokens.
     await unlink(checkpointPath)
-    console.log(`Relay setup complete: ${AGENT_NAMES.join(", ")}.`)
+    console.log(`${baseUrl ? "Local" : "Hosted"} Relay setup complete: ${AGENT_NAMES.join(", ")}.`)
 }
 
 if (import.meta.main) {

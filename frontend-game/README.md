@@ -99,13 +99,14 @@ The existing `src/index.ts` exports remain usable independently of the rendered 
 | `state` | Public world state, moods, clues and outcome; `spyId` stays null during play |
 | `messages` | Local conversation history |
 | `chat(id, text)` | Send a message, up to the server's 300-character limit |
-| `waitingFor`, `error` | Pending reply and latest chat error |
-| `secondsLeft`, `secondsToReveal` | Countdown displays derived from server deadlines |
+| `waiting`, `waitingFor`, `error` | Spirits still replying (different spirits can reply at once), the first of them, and the latest chat error (`still_replying` when messaging a busy spirit) |
+| `secondsLeft`, `secondsToReveal` | Countdown displays derived from server deadlines, corrected for the device's clock |
 | `connected` | Current live socket status |
 | `start()`, `accuse(id)` | Server-controlled game actions |
 | `useCue(handler)` | Subscribe to backend animation cues; call unconditionally in the component |
 | `shareUrl()` | Link to rejoin the same session |
 | `director()` | Post-game evidence; the server rejects access during play |
+| `witchVoiceUrl(clueId)` | MP3 of the witch speaking a revealed clue. New clues are spoken automatically; pass `witchVoice: false` to `useSpyMonster` to mute |
 
 `messages` is separate from the `chat()` sending function. Animation moods use `Idle`, `Talk`, `Think` and `Accused`; `nervous` falls back to `Think`, because these exports contain no `Nervous` clip.
 

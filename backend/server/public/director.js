@@ -10,6 +10,7 @@ let current = new URLSearchParams(location.search).get('game')
 let generation = 0, controller = null, polling = null, ticking = null, fingerprint = '', selectedClue = null, messageFilter = 'all'
 let cachedLive = { game: null, rows: [], since: null }
 let renderedModel = null
+let board = { panel: null, at: 0 }
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches
 
 function el(tag, attributes = {}, ...children) {
@@ -306,10 +307,30 @@ function render(model) {
     if (scroll && linked.messages.size) [...msgNodes].find(([id]) => linked.messages.has(id))?.[1].scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'nearest' })
   }
   populateMessages()
-  const dashboard = el('div', { class: 'dashboard', id: 'overview' }, metricGrid(model), privacy, flow, el('div', { class: 'lower-grid' }, messagesPanel, cluesPanel, timelinePanel), el('div', { class: 'footer' }, el('span', {}, el('i', { class: 'footer-dot' }), 'Agent Relay carries the whispers. Terse keeps the record.'), el('span', {}, model.pub.sessionId)))
+  const footer = el('div', { class: 'footer' }, el('span', {}, el('i', { class: 'footer-dot' }), 'Agent Relay carries the whispers. Terse keeps the record.'), el('span', {}, model.pub.sessionId))
+  const dashboard = el('div', { class: 'dashboard', id: 'overview' }, metricGrid(model), privacy, flow, el('div', { class: 'lower-grid' }, messagesPanel, cluesPanel, timelinePanel), footer)
   root.replaceChildren(dashboard)
+  void leaderboardPanel().then(panel => { if (panel && dashboard.isConnected) dashboard.insertBefore(panel.cloneNode(true), footer) })
   if (selectedClue && !clueNodes.has(selectedClue)) selectedClue = null
   applySelection(false)
+}
+
+// ---------- all games (Supabase; the endpoint reports disabled without keys) ----------
+async function leaderboardPanel() {
+  if (Date.now() - board.at < 15000) return board.panel
+  board.at = Date.now()
+  const lb = await getJSON('/api/leaderboard').catch(() => null)
+  if (!lb || lb.disabled || !lb.totals) return board.panel = null
+  const t = lb.totals, top = lb.monsters?.[0]
+  const stat = (label, value) => el('div', { class: 'board-stat' }, el('span', {}, label), el('strong', {}, value))
+  return board.panel = el('section', { class: 'panel board-panel', id: 'all-games' },
+    panelHeader('All games', 'Every finished game is archived to Supabase Postgres; live games stay in Terse actors.', badge(`${t.games} played`)),
+    el('div', { class: 'board-stats' },
+      stat('Players escaped', t.escape_rate_pct === null ? '—' : `${t.escape_rate_pct}%`),
+      stat('Fastest catch', t.fastest_catch_seconds === null ? '—' : clockOf(t.fastest_catch_seconds * 1000)),
+      stat('Most deceptive', top ? `${nameOf(top.monster)} · ${top.got_away_pct ?? 0}%` : '—'),
+      stat('Whispers sent', String(t.total_whispers)),
+      stat('Fakes blocked', String(t.total_fakes_blocked))))
 }
 
 picker.addEventListener('change', () => {

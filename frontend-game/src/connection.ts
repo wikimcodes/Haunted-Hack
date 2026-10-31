@@ -7,8 +7,12 @@ import type { ChatLine, Cue, MonsterId, PublicGameState } from "./types"
 export interface GameSnapshot {
     state: PublicGameState | null
     connected: boolean
-    /** Monster currently waiting on a reply, if any. */
+    /** Monsters currently working on a reply. */
+    waiting: MonsterId[]
+    /** First monster still replying, if any (kept for simple UIs). */
     waitingFor: MonsterId | null
+    /** Server clock minus this device's clock, so countdowns stay right on a phone whose clock is off. */
+    clockOffsetMs: number
     chat: ChatLine[]
     error: string | null
 }
@@ -20,7 +24,7 @@ const STORAGE_KEY = "spy-monster-session"
 
 export class GameConnection {
     readonly api: GameApi
-    #snapshot: GameSnapshot = { state: null, connected: false, waitingFor: null, chat: [], error: null }
+    #snapshot: GameSnapshot = { state: null, connected: false, waiting: [], waitingFor: null, clockOffsetMs: 0, chat: [], error: null }
     #listeners = new Set<Listener>()
     #cueListeners = new Set<CueListener>()
     #socket: WebSocket | null = null
@@ -31,8 +35,16 @@ export class GameConnection {
     #socketGeneration = 0
     #retryTimer: ReturnType<typeof setTimeout> | null = null
 
-    constructor(apiUrl: string) {
-        this.api = createGameApi(apiUrl)
+    #witchVoice: boolean
+    #spokenClues: Set<string> | null = null
+
+    constructor(apiUrl: string, options: { witchVoice?: boolean } = {}) {
+        this.#witchVoice = options.witchVoice ?? true
+        this.api = createGameApi(apiUrl, {
+            onServerTime: offset => {
+                if (Math.abs(offset - this.#snapshot.clockOffsetMs) > 250) this.#set({ clockOffsetMs: Math.round(offset) })
+            }
+        })
     }
 
     // ----- subscriptions (useSyncExternalStore-compatible) -----------------
@@ -62,6 +74,7 @@ export class GameConnection {
         const generation = this.#beginSession()
         const state = await this.api.start(options)
         if (!this.#isCurrent(generation)) throw new DOMException("Game connection was closed or replaced", "AbortError")
+        this.#spokenClues = new Set() // a brand-new game: speak every clue
         this.#remember(state.sessionId)
         this.#set({ state, chat: [], error: null })
         void this.#connect(state.sessionId, generation)
@@ -78,6 +91,7 @@ export class GameConnection {
         try {
             const state = await this.api.get(sessionId)
             if (!this.#isCurrent(generation)) return null
+            this.#spokenClues = null // rejoining: don't replay clues revealed before we arrived
             this.#remember(sessionId)
             this.#set({ state, error: null, chat: this.#loadChat(sessionId) })
             void this.#connect(sessionId, generation)
@@ -87,23 +101,35 @@ export class GameConnection {
         }
     }
 
-    async chat(monsterId: MonsterId, message: string): Promise<void> {
+    /**
+     * Sends a message to one monster. Different monsters can be asked at the same time;
+     * a second message to a monster that is still replying is refused (returns false, sets error).
+     */
+    async chat(monsterId: MonsterId, message: string): Promise<boolean> {
         const sessionId = this.#sessionId
         const generation = this.#generation
-        if (this.#closed || !sessionId || this.#snapshot.waitingFor) return
-        const now = Date.now()
-        const playerLine: ChatLine = { id: crypto.randomUUID(), monsterId, role: "player", text: message, at: now }
-        this.#pushChat(playerLine)
-        this.#set({ waitingFor: monsterId, error: null })
+        if (this.#closed || !sessionId) return false
+        if (this.#snapshot.waiting.includes(monsterId)) {
+            this.#set({ error: "still_replying" })
+            return false
+        }
+        this.#pushChat({ id: crypto.randomUUID(), monsterId, role: "player", text: message, at: Date.now() })
+        this.#setWaiting([...this.#snapshot.waiting, monsterId], { error: null })
         try {
             const result = await this.api.chat(sessionId, monsterId, message)
-            if (!this.#isCurrent(generation, sessionId)) return
+            if (!this.#isCurrent(generation, sessionId)) return false
             this.#pushChat({ id: crypto.randomUUID(), monsterId, role: "monster", text: result.reply, at: Date.now() })
-            this.#set({ waitingFor: null })
+            this.#setWaiting(this.#snapshot.waiting.filter(m => m !== monsterId))
+            return true
         } catch (err) {
-            if (!this.#isCurrent(generation, sessionId)) return
-            this.#set({ waitingFor: null, error: (err as Error).message })
+            if (!this.#isCurrent(generation, sessionId)) return false
+            this.#setWaiting(this.#snapshot.waiting.filter(m => m !== monsterId), { error: (err as Error).message })
+            return false
         }
+    }
+
+    #setWaiting(waiting: MonsterId[], extra: Partial<GameSnapshot> = {}): void {
+        this.#set({ ...extra, waiting, waitingFor: waiting[0] ?? null })
     }
 
     async accuse(monsterId: MonsterId): Promise<PublicGameState | null> {
@@ -134,7 +160,7 @@ export class GameConnection {
         this.#closed = true
         this.#generation++
         this.#cancelSocket()
-        this.#set({ connected: false, waitingFor: null })
+        this.#setWaiting([], { connected: false })
     }
 
     // ----- WebSocket ---------------------------------------------------------
@@ -149,7 +175,7 @@ export class GameConnection {
         this.#sessionId = null
         this.#retryMs = 500
         this.#cancelSocket()
-        this.#set({ connected: false, waitingFor: null })
+        this.#setWaiting([], { connected: false })
         return this.#generation
     }
 
@@ -205,6 +231,33 @@ export class GameConnection {
         }, wait)
     }
 
+    #applyState(state: PublicGameState): void {
+        this.#set({ state })
+        this.#speakNewClues(state)
+    }
+
+    /** Turns the witch's spoken clues on or off (on by default). */
+    setWitchVoice(on: boolean): void {
+        this.#witchVoice = on
+    }
+
+    // Speaks clues revealed while this client is watching. Clues that already existed when the
+    // client joined (a refresh, a second phone) are not replayed.
+    #speakNewClues(state: PublicGameState): void {
+        if (!this.#spokenClues) {
+            this.#spokenClues = new Set(state.clues.map(c => c.id))
+            return
+        }
+        for (const clue of state.clues) {
+            if (this.#spokenClues.has(clue.id)) continue
+            this.#spokenClues.add(clue.id)
+            if (this.#witchVoice && typeof Audio !== "undefined") {
+                // Browsers only allow sound after the player has tapped something; starting the game counts.
+                void new Audio(this.api.voiceUrl(state.sessionId, clue.id)).play().catch(() => {})
+            }
+        }
+    }
+
     #receive(raw: string): void {
         if (raw === "pong") return
         let message: { type?: string; state?: { publicState?: PublicGameState }; changes?: { publicState?: PublicGameState } }
@@ -213,8 +266,8 @@ export class GameConnection {
         } catch {
             return
         }
-        if (message.type === "state" && message.state?.publicState?.sessionId === this.#sessionId) this.#set({ state: message.state.publicState })
-        else if (message.type === "state_update" && message.changes?.publicState?.sessionId === this.#sessionId) this.#set({ state: message.changes.publicState })
+        if (message.type === "state" && message.state?.publicState?.sessionId === this.#sessionId) this.#applyState(message.state.publicState)
+        else if (message.type === "state_update" && message.changes?.publicState?.sessionId === this.#sessionId) this.#applyState(message.changes.publicState)
         else if (message.type === "cue") this.#cueListeners.forEach(l => l(message as unknown as Cue))
     }
 
