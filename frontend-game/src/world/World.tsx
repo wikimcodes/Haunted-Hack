@@ -6,7 +6,7 @@ import { HDRLoader } from "three/addons/loaders/HDRLoader.js"
 import type { MonsterId, Mood } from "../types"
 import { LibraryAudio, type AudioStatus } from "../audio/LibraryAudio"
 import { EYE_HEIGHT, isWalkable, moveWithCollisions, OBSTACLES, SPAWN } from "./collision"
-import { CameraDirector, DEFAULT_PRESENTATION, candleModulation, cinematicFrameDelta, lightProfile, poseLookingAt, revealLighting, type CameraPose, type PresentationManifest, type PresentationState } from "./cinematics"
+import { CameraDirector, DEFAULT_PRESENTATION, SCARE_DURATION, candleModulation, cinematicFrameDelta, lightProfile, poseLookingAt, revealLighting, scareLighting, strongerLighting, type CameraPose, type PresentationManifest, type PresentationState } from "./cinematics"
 import "./world.css"
 
 export interface WorldHandle { lock(): void; unlock(): void; reset(): void; unlockAudio(): Promise<boolean> }
@@ -18,6 +18,8 @@ export interface WorldProps {
     presentation?: PresentationState
     focusMonster?: MonsterId | null
     revealToken?: number
+    /** Increment to play a short surprise glimpse of the witch. It never takes the camera. */
+    scareToken?: number
     soundMuted?: boolean
     onAudioStatus?: (status: AudioStatus) => void
     /** True only while the short witch reveal owns the camera. Keep active=true to play it. */
@@ -116,6 +118,9 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
         let pointerX = 0
         let pointerY = 0
         let lastDoorOpen = false
+        let lastScareToken = latest.current.scareToken ?? 0
+        let scareStart = -Infinity
+        let scareTimer: ReturnType<typeof setTimeout> | undefined
         let presentationConfig = DEFAULT_PRESENTATION
         let director: CameraDirector | null = null
         const abort = new AbortController()
@@ -650,6 +655,18 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
                 if (!director.movementBlocked) orientation.setFromQuaternion(camera.quaternion, "YXZ")
             }
             syncAudio()
+            if ((state.scareToken ?? 0) !== lastScareToken) {
+                lastScareToken = state.scareToken ?? 0
+                if (state.active && ready) {
+                    scareStart = time
+                    audio.scare()
+                    if (!reducedMotion) {
+                        hostRef.current?.classList.add("world-scare")
+                        clearTimeout(scareTimer)
+                        scareTimer = setTimeout(() => hostRef.current?.classList.remove("world-scare"), SCARE_DURATION * 1000)
+                    }
+                }
+            }
             if (state.active && ready) {
                 if (state.interactive && !director?.movementBlocked) {
                     const pressed = keys.current
@@ -686,7 +703,7 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
                 const profile = lightProfile(state.presentation ?? "introduction")
                 const smoothing = 1 - Math.exp(-delta * 1.35)
                 for (const key of Object.keys(currentLight) as (keyof typeof currentLight)[]) currentLight[key] = THREE.MathUtils.lerp(currentLight[key], profile[key], smoothing)
-                const cue = revealLighting(director?.isRevealing ? director.elapsed : -1)
+                const cue = strongerLighting(revealLighting(director?.isRevealing ? director.elapsed : -1), scareLighting((time - scareStart) / 1000, reducedMotion))
                 const reveal = cue.presence
                 // Keep idle cloth solid; only the public won state fades its coverage.
                 const apparition = state.presentation === "won" ? currentLight.witch : 1
@@ -727,6 +744,8 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
 
         return () => {
             disposed = true
+            clearTimeout(scareTimer)
+            hostRef.current?.classList.remove("world-scare")
             audio.dispose()
             abort.abort()
             director?.cancel()

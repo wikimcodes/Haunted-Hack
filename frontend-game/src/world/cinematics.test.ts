@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import { PerspectiveCamera, Vector3 } from "three"
 import {
-    CameraDirector, REVEAL_DURATION, REVEAL_HOLD, REVEAL_ENTER, REVEAL_LIGHT_FULL, REVEAL_RETURN,
+    CameraDirector, SCARE_DURATION, scareLighting, strongerLighting, REVEAL_DURATION, REVEAL_HOLD, REVEAL_ENTER, REVEAL_LIGHT_FULL, REVEAL_RETURN,
     candleModulation, cinematicFrameDelta, capturePose, lightProfile, poseLookingAt, revealEnvelope, revealLighting, type CameraPose
 } from "./cinematics"
 
@@ -196,4 +196,23 @@ test("one long visible frame finishes the cue while invalid frame times cannot r
     assert.equal(cinematicFrameDelta(100, 200), 0)
     assert.equal(cinematicFrameDelta(NaN, 200), 0)
     assert.equal(cinematicFrameDelta(200, Infinity), 0)
+})
+
+test("a surprise glimpse darkens the room at once, flickers the witch in, then gives the light back", () => {
+    assert.equal(scareLighting(-1).darkness, 0)
+    assert.equal(scareLighting(.06).darkness, 1)
+    assert.equal(scareLighting(.15).presence, 1)
+    assert.equal(scareLighting(.25).presence, 0, "first flicker")
+    assert.equal(scareLighting(.6).presence, 1)
+    assert.ok(scareLighting(1.5).darkness < 1 && scareLighting(1.5).darkness > 0)
+    assert.equal(scareLighting(SCARE_DURATION).darkness, 0)
+    assert.equal(scareLighting(SCARE_DURATION).presence, 0)
+    assert.equal(scareLighting(.25, true).presence, 1, "reduced motion has no flicker")
+})
+
+test("a glimpse and a reveal combine to the darker, more present light", () => {
+    const combined = strongerLighting(revealLighting(.1), scareLighting(.6))
+    assert.equal(combined.darkness, 1)
+    assert.equal(combined.presence, 1)
+    assert.deepEqual(strongerLighting(revealLighting(-1), scareLighting(-1)), revealLighting(-1))
 })

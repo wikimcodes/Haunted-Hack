@@ -16,6 +16,9 @@ type Voice = { source: AudioBufferSourceNode; gain: GainNode; clock: number; off
 const FADE_SECONDS = .035
 const REVEAL_SECONDS = 6
 const SOUND_REVISION = "elevenlabs-1"
+/** A glimpse reuses the reveal sting's first hit (loudest around 0.35 s), not its later impacts. */
+const SCARE_OFFSET = .15
+const SCARE_SECONDS = 1.8
 
 /** Make space for the arrival: near silence, impact, then a slow return to the room. */
 function atmosphereLevel(elapsed: number | undefined): number {
@@ -39,6 +42,7 @@ export class LibraryAudio {
     private buffers: { room: AudioBuffer; reveal: AudioBuffer } | null = null
     private room: Voice | null = null
     private reveal: Voice | null = null
+    private scareVoice: Voice | null = null
     private roomOffset = 0
     private highestToken = 0
     private finishedToken = -1
@@ -95,6 +99,24 @@ export class LibraryAudio {
         this.frame = frame
         if (frame.reveal && Number.isFinite(frame.reveal.token)) this.highestToken = Math.max(this.highestToken, frame.reveal.token)
         this.reconcile()
+    }
+
+    /** The witch's surprise glimpse: the sting's first hit, with the room ducked under it. Plays once, now. */
+    scare(): void {
+        const ctx = this.context
+        if (this.disposed || !ctx || !this.requested || ctx.state !== "running" || !this.buffers || this.failed || this.hidden || this.frame.muted || !this.frame.active) return
+        this.stopScare()
+        const voice = this.scareVoice = this.startVoice(this.buffers.reveal, this.panner!, false, SCARE_OFFSET)
+        voice.gain.gain.setTargetAtTime(0, ctx.currentTime + SCARE_SECONDS - .45, .12)
+        voice.source.stop(ctx.currentTime + SCARE_SECONDS)
+        voice.source.onended = () => {
+            voice.source.disconnect(); voice.gain.disconnect()
+            if (this.scareVoice === voice) this.scareVoice = null
+        }
+        if (this.roomLevel > 0) {
+            this.roomGain!.gain.setTargetAtTime(this.roomLevel * .06, ctx.currentTime, .015)
+            this.roomGain!.gain.setTargetAtTime(this.roomLevel, ctx.currentTime + 1.2, .3)
+        }
     }
 
     setHidden(hidden: boolean): void {
@@ -189,12 +211,14 @@ export class LibraryAudio {
         try { voice.source.stop(ctx.currentTime + FADE_SECONDS) } catch { /* Already finished. */ }
     }
     private stopReveal(): void { if (this.reveal) { this.stop(this.reveal); this.reveal = null } }
+    private stopScare(): void { if (this.scareVoice) { this.stop(this.scareVoice); this.scareVoice = null } }
     private stopVoices(): void {
         if (this.room) {
             this.roomOffset = this.room.offset + this.context!.currentTime - this.room.clock
             this.stop(this.room); this.room = null
         }
         this.stopReveal()
+        this.stopScare()
     }
 
     dispose(): void {
