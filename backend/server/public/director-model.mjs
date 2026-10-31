@@ -56,7 +56,7 @@ export function completedModel(view) {
     relayTotal: new Set(messages.map(m => m.id)).size,
     breakdown: [{ label: 'Gossip', value: messages.filter(m => m.kind === 'gossip').length, color: '#dddddf' }, { label: 'Reports', value: messages.filter(m => m.kind === 'report').length, color: '#9c99ad' }, { label: 'Rejected', value: messages.filter(m => m.kind === 'rejected').length, color: '#5c5b61' }],
     elapsed: pub.startedAt === null || endedAt === null ? null : Math.max(0, endedAt - pub.startedAt), remaining: 0,
-    result: ({ won: 'Escaped', lost: 'Caught', expired: 'Time expired' }[pub.phase]) || 'Completed' }
+    result: ({ won: 'Player escaped', lost: 'Wrong ghost accused', expired: 'Dawn came' }[pub.phase]) || 'Completed' }
 }
 export function linkedEvidence(model, clueId) {
   if (model.locked) return { messages: new Set(), events: new Set() }
