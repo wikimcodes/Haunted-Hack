@@ -27,6 +27,9 @@ export class GameConnection {
     #sessionId: string | null = null
     #closed = false
     #retryMs = 500
+    #generation = 0
+    #socketGeneration = 0
+    #retryTimer: ReturnType<typeof setTimeout> | null = null
 
     constructor(apiUrl: string) {
         this.api = createGameApi(apiUrl)
@@ -56,10 +59,12 @@ export class GameConnection {
 
     /** Starts a new game and connects to it. */
     async start(options?: { gameSeconds?: number; revealSeconds?: number }): Promise<PublicGameState> {
+        const generation = this.#beginSession()
         const state = await this.api.start(options)
+        if (!this.#isCurrent(generation)) throw new DOMException("Game connection was closed or replaced", "AbortError")
         this.#remember(state.sessionId)
         this.#set({ state, chat: [], error: null })
-        this.#connect(state.sessionId)
+        void this.#connect(state.sessionId, generation)
         return state
     }
 
@@ -69,11 +74,13 @@ export class GameConnection {
      */
     async resume(sessionId = GameConnection.savedSessionId()): Promise<PublicGameState | null> {
         if (!sessionId) return null
+        const generation = this.#beginSession()
         try {
             const state = await this.api.get(sessionId)
+            if (!this.#isCurrent(generation)) return null
             this.#remember(sessionId)
             this.#set({ state, error: null, chat: this.#loadChat(sessionId) })
-            this.#connect(sessionId)
+            void this.#connect(sessionId, generation)
             return state
         } catch {
             return null
@@ -82,24 +89,29 @@ export class GameConnection {
 
     async chat(monsterId: MonsterId, message: string): Promise<void> {
         const sessionId = this.#sessionId
-        if (!sessionId || this.#snapshot.waitingFor) return
+        const generation = this.#generation
+        if (this.#closed || !sessionId || this.#snapshot.waitingFor) return
         const now = Date.now()
         const playerLine: ChatLine = { id: crypto.randomUUID(), monsterId, role: "player", text: message, at: now }
         this.#pushChat(playerLine)
         this.#set({ waitingFor: monsterId, error: null })
         try {
             const result = await this.api.chat(sessionId, monsterId, message)
+            if (!this.#isCurrent(generation, sessionId)) return
             this.#pushChat({ id: crypto.randomUUID(), monsterId, role: "monster", text: result.reply, at: Date.now() })
             this.#set({ waitingFor: null })
         } catch (err) {
+            if (!this.#isCurrent(generation, sessionId)) return
             this.#set({ waitingFor: null, error: (err as Error).message })
         }
     }
 
     async accuse(monsterId: MonsterId): Promise<PublicGameState | null> {
         const sessionId = this.#sessionId
-        if (!sessionId) return null
+        const generation = this.#generation
+        if (this.#closed || !sessionId) return null
         const { state } = await this.api.accuse(sessionId, monsterId)
+        if (!this.#isCurrent(generation, sessionId)) return null
         this.#set({ state })
         return state
     }
@@ -120,41 +132,76 @@ export class GameConnection {
 
     close(): void {
         this.#closed = true
-        this.#socket?.close()
+        this.#generation++
+        this.#cancelSocket()
+        this.#set({ connected: false, waitingFor: null })
     }
 
     // ----- WebSocket ---------------------------------------------------------
 
-    async #connect(sessionId: string): Promise<void> {
-        this.#socket?.close()
+    #isCurrent(generation: number, sessionId?: string): boolean {
+        return !this.#closed && this.#generation === generation && (sessionId === undefined || this.#sessionId === sessionId)
+    }
+
+    #beginSession(): number {
         this.#closed = false
-        this.#sessionId = sessionId
-        try {
-            const { websocketUrl } = await this.api.socket(sessionId, "player")
-            if (this.#sessionId !== sessionId || this.#closed) return
-            const ws = new WebSocket(websocketUrl)
-            this.#socket = ws
-            ws.onopen = () => {
-                this.#retryMs = 500
-                this.#set({ connected: true })
-            }
-            ws.onmessage = event => this.#receive(String(event.data))
-            ws.onclose = () => {
-                if (this.#socket !== ws) return
-                this.#set({ connected: false })
-                this.#reconnectLater(sessionId)
-            }
-        } catch {
-            this.#reconnectLater(sessionId)
+        this.#generation++
+        this.#sessionId = null
+        this.#retryMs = 500
+        this.#cancelSocket()
+        this.#set({ connected: false, waitingFor: null })
+        return this.#generation
+    }
+
+    #cancelSocket(): void {
+        this.#socketGeneration++
+        if (this.#retryTimer !== null) clearTimeout(this.#retryTimer)
+        this.#retryTimer = null
+        const socket = this.#socket
+        this.#socket = null
+        if (socket) {
+            socket.onopen = socket.onmessage = socket.onclose = socket.onerror = null
+            socket.close()
         }
     }
 
-    #reconnectLater(sessionId: string): void {
-        if (this.#closed || this.#sessionId !== sessionId) return
+    async #connect(sessionId: string, generation: number): Promise<void> {
+        if (!this.#isCurrent(generation, sessionId)) return
+        this.#cancelSocket()
+        const socketGeneration = this.#socketGeneration
+        const current = () => this.#isCurrent(generation, sessionId) && this.#socketGeneration === socketGeneration
+        try {
+            const { websocketUrl } = await this.api.socket(sessionId, "player")
+            if (!current()) return
+            const ws = new WebSocket(websocketUrl)
+            this.#socket = ws
+            ws.onopen = () => {
+                if (!current() || this.#socket !== ws) return
+                this.#retryMs = 500
+                this.#set({ connected: true })
+            }
+            ws.onmessage = event => {
+                if (current() && this.#socket === ws) this.#receive(String(event.data))
+            }
+            ws.onclose = () => {
+                if (!current() || this.#socket !== ws) return
+                this.#socket = null
+                this.#set({ connected: false })
+                this.#reconnectLater(sessionId, generation, socketGeneration)
+            }
+        } catch {
+            if (current()) this.#reconnectLater(sessionId, generation, socketGeneration)
+        }
+    }
+
+    #reconnectLater(sessionId: string, generation: number, socketGeneration: number): void {
+        if (!this.#isCurrent(generation, sessionId) || this.#socketGeneration !== socketGeneration) return
+        if (this.#retryTimer !== null) clearTimeout(this.#retryTimer)
         const wait = this.#retryMs
         this.#retryMs = Math.min(this.#retryMs * 2, 8000)
-        setTimeout(() => {
-            if (!this.#closed && this.#sessionId === sessionId) this.#connect(sessionId)
+        this.#retryTimer = setTimeout(() => {
+            this.#retryTimer = null
+            if (this.#isCurrent(generation, sessionId) && this.#socketGeneration === socketGeneration) void this.#connect(sessionId, generation)
         }, wait)
     }
 
@@ -166,8 +213,8 @@ export class GameConnection {
         } catch {
             return
         }
-        if (message.type === "state" && message.state?.publicState) this.#set({ state: message.state.publicState })
-        else if (message.type === "state_update" && message.changes?.publicState) this.#set({ state: message.changes.publicState })
+        if (message.type === "state" && message.state?.publicState?.sessionId === this.#sessionId) this.#set({ state: message.state.publicState })
+        else if (message.type === "state_update" && message.changes?.publicState?.sessionId === this.#sessionId) this.#set({ state: message.changes.publicState })
         else if (message.type === "cue") this.#cueListeners.forEach(l => l(message as unknown as Cue))
     }
 
@@ -206,7 +253,11 @@ export class GameConnection {
 
     #loadChat(sessionId: string): ChatLine[] {
         try {
-            return JSON.parse(localStorage.getItem(`${STORAGE_KEY}:${sessionId}:chat`) ?? "[]") as ChatLine[]
+            const value: unknown = JSON.parse(localStorage.getItem(`${STORAGE_KEY}:${sessionId}:chat`) ?? "[]")
+            if (!Array.isArray(value)) return []
+            return value.filter((line): line is ChatLine => line !== null && typeof line === "object"
+                && typeof line.id === "string" && ["sprout", "pebble", "momo"].includes(line.monsterId)
+                && ["player", "monster"].includes(line.role) && typeof line.text === "string" && typeof line.at === "number")
         } catch {
             return []
         }

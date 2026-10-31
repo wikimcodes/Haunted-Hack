@@ -316,5 +316,6 @@
         }
       }
     }
-  }
+  },
+  "scope": "Original Blender exports before WebP/Meshopt compression. For web asset checks, see web-validation-report.json."
 }

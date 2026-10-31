@@ -18,3 +18,7 @@ The library and ghosts were created for The Spy Monster. Texture sources from Po
 - [Worn Mossy Plasterwall](https://polyhaven.com/a/worn_mossy_plasterwall) — Amal Kumar
 
 Book titles and surface atlases are generated artwork. The user's cinematic reference is not included in the repository or used as an in-game room backdrop. The forest HDRI supplies distant scenery and ambient lighting.
+
+## Web delivery
+
+The original five exports (68.85 MB total) were first pushed in commit `dd9ccf6`. Current runtime GLBs use WebP quality 90 and Meshopt compression (12.61 MB total; HDRI and poster additional). No polygon simplification was applied. Triangles, clip names/durations/channels, morph primitives and RGBA morph attributes were checked against the source exports; see `web-validation-report.json`. Three.js must configure `MeshoptDecoder` on `GLTFLoader`. WebP reduces transfer size; GPU texture memory is still uncompressed.

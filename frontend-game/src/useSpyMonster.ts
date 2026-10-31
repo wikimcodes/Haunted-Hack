@@ -29,6 +29,8 @@ export function useSpyMonster({ apiUrl, autoResume = true }: UseSpyMonsterOption
     const state = snapshot.state
     return {
         ...snapshot,
+        /** Conversation history. `chat` below is the sending action. */
+        messages: snapshot.chat,
         /** Whole seconds until dawn, from the server's deadline. */
         secondsLeft: state ? Math.max(0, Math.ceil((state.deadlineAt - now) / 1000)) : null,
         /** Whole seconds until the witch's next reveal, or null if none is left. */

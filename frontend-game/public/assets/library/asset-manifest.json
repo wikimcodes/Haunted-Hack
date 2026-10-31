@@ -37,14 +37,14 @@
   "assets": {
     "environment": {
       "file": "environment.glb",
-      "bytes": 58740172,
+      "bytes": 10942860,
       "triangles": 326331,
       "meshes": 1,
       "primitives": 37,
       "materials": 37,
       "nodes": 1,
       "animations": [],
-      "validation": "glTF 2.0 header, JSON, embedded buffers, mesh indices/material references, clip names checked",
+      "validation": "Source Blender reimport plus web compression geometry/animation/RGBA structure checks; browser uses MeshoptDecoder.",
       "placement": {
         "position": [
           0,
@@ -61,7 +61,7 @@
     },
     "sprout": {
       "file": "sprout.glb",
-      "bytes": 1196396,
+      "bytes": 319516,
       "triangles": 23456,
       "meshes": 3,
       "primitives": 4,
@@ -93,7 +93,7 @@
           "weightChannels": 1
         }
       ],
-      "validation": "glTF 2.0 header, JSON, embedded buffers, mesh indices/material references, clip names checked",
+      "validation": "Source Blender reimport plus web compression geometry/animation/RGBA structure checks; browser uses MeshoptDecoder.",
       "placement": {
         "position": [
           -0.7,
@@ -121,7 +121,7 @@
     },
     "pebble": {
       "file": "pebble.glb",
-      "bytes": 1196408,
+      "bytes": 320372,
       "triangles": 23456,
       "meshes": 3,
       "primitives": 4,
@@ -153,7 +153,7 @@
           "weightChannels": 1
         }
       ],
-      "validation": "glTF 2.0 header, JSON, embedded buffers, mesh indices/material references, clip names checked",
+      "validation": "Source Blender reimport plus web compression geometry/animation/RGBA structure checks; browser uses MeshoptDecoder.",
       "placement": {
         "position": [
           0.85,
@@ -181,7 +181,7 @@
     },
     "momo": {
       "file": "momo.glb",
-      "bytes": 1196400,
+      "bytes": 318796,
       "triangles": 23456,
       "meshes": 3,
       "primitives": 4,
@@ -213,7 +213,7 @@
           "weightChannels": 1
         }
       ],
-      "validation": "glTF 2.0 header, JSON, embedded buffers, mesh indices/material references, clip names checked",
+      "validation": "Source Blender reimport plus web compression geometry/animation/RGBA structure checks; browser uses MeshoptDecoder.",
       "placement": {
         "position": [
           1.55,
@@ -241,7 +241,7 @@
     },
     "door": {
       "file": "door.glb",
-      "bytes": 6523012,
+      "bytes": 708164,
       "triangles": 7722,
       "meshes": 57,
       "primitives": 57,
@@ -255,7 +255,7 @@
           "weightChannels": 0
         }
       ],
-      "validation": "glTF 2.0 header, JSON, embedded buffers, mesh indices/material references, clip names checked",
+      "validation": "Source Blender reimport plus web compression geometry/animation/RGBA structure checks; browser uses MeshoptDecoder.",
       "placement": {
         "position": [
           3.51,
@@ -282,6 +282,8 @@
       }
     }
   },
-  "totalBytes": 68852388,
-  "totalTriangles": 404421
+  "totalBytes": 12609708,
+  "totalTriangles": 404421,
+  "webCompression": "WebP quality90 + Meshopt medium; 16-bit positions,12-bit normals,14-bit UV where applicable; tiled UVs retained at full precision. No simplification.",
+  "originalExportsCommit": "dd9ccf6"
 }
