@@ -20,7 +20,9 @@ Or run `zsh backend/set-keys.sh` once. It asks for the OpenAI and Terse keys wit
 | `OPENAI_API_KEY` | none | Monster replies. Without it, monsters use scripted lines. |
 | `OPENAI_MODEL` | `gpt-5-mini` | Model for monster replies. |
 | `OPENAI_TIMEOUT_MS` | `10000` | Per-request OpenAI timeout. No retries. |
+| `OPENAI_TRANSCRIBE_MODEL` | `gpt-4o-mini-transcribe` | Turns the player's spoken question into a chat message. |
 | `PORT` | `3001` | API server port. |
+| `TLS_CERT_FILE`, `TLS_KEY_FILE` | none | Serve HTTPS directly. Phones only allow the microphone on HTTPS, so set these for voice play over local wifi (a self-signed certificate works). |
 | `GAME_SECONDS` | `180` | Investigation length. |
 | `REVEAL_SECONDS` | `60` | Interval between witch reveals. |
 | `ALLOWED_ORIGIN` | `*` | CORS origin. Set it to the frontend URL in production. |

@@ -42,6 +42,7 @@ export function useSpyMonster({ apiUrl, autoResume = true, voices = true }: UseS
         isOver: state ? state.phase !== "playing" : false,
         start: (options?: { gameSeconds?: number; revealSeconds?: number }) => connection.start(options),
         chat: (monsterId: MonsterId, message: string) => connection.chat(monsterId, message),
+        transcribe: (audio: Blob) => connection.transcribe(audio),
         accuse: (monsterId: MonsterId) => connection.accuse(monsterId),
         director: () => connection.director(),
         shareUrl: () => connection.shareUrl(),

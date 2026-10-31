@@ -1,7 +1,7 @@
 // Monster dialogue via OpenAI structured output, with a scripted fallback so the demo
 // never stalls on a missing key, a timeout or a bad response.
 
-import OpenAI from "openai"
+import OpenAI, { toFile } from "openai"
 
 import type { MonsterId } from "./types"
 
@@ -209,4 +209,24 @@ export async function speech(speaker: Speaker, text: string): Promise<ArrayBuffe
         console.error(`[voice] failed for ${speaker}:`, String(err).slice(0, 160))
         return null
     }
+}
+
+// ----- the player's voice --------------------------------------------------------
+
+const TRANSCRIBE_MODEL = process.env.OPENAI_TRANSCRIBE_MODEL ?? "gpt-4o-mini-transcribe"
+const AUDIO_EXTENSIONS: Record<string, string> = { "audio/webm": "webm", "audio/ogg": "ogg", "audio/mp4": "mp4", "audio/mpeg": "mp3", "audio/wav": "wav", "audio/x-wav": "wav" }
+
+export const canTranscribe = () => client !== null
+
+/** The player's recorded question -> text. `type` is the recording's MIME type, e.g. "audio/webm;codecs=opus". */
+export async function transcribe(audio: ArrayBuffer, type: string): Promise<string> {
+    const base = type.split(";")[0]!.trim()
+    const file = await toFile(new Uint8Array(audio), `speech.${AUDIO_EXTENSIONS[base] ?? "webm"}`, { type: base })
+    const result = await client!.audio.transcriptions.create({
+        model: TRANSCRIBE_MODEL,
+        file,
+        // Names the model would otherwise misspell.
+        prompt: "A player in a haunted library talks to the ghosts Sprout, Pebble and Momo about the witch and her spy."
+    })
+    return result.text.trim()
 }

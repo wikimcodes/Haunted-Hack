@@ -5,6 +5,8 @@ import { useSpyMonster } from './useSpyMonster'
 import type { MonsterId, Mood } from './types'
 import { DirectorLink } from './components/DirectorLink'
 import type { AudioStatus } from './audio/LibraryAudio'
+import { canRecord, startRecording, type Recording } from './audio/recorder'
+import { GameApiError } from './api'
 
 const spirits: Record<MonsterId, { name: string; title: string; description: string }> = {
   sprout: { name: 'Sprout', title: 'The friendly one', description: 'A warm welcome in a very cold room. Sprout always seems to have something to say.' },
@@ -26,6 +28,13 @@ function SoundButton({ muted, toggle, compact = false }: { muted: boolean; toggl
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />{muted ? <path d="m16 9 6 6m0-6-6 6" stroke="currentColor" strokeWidth="1.4" /> : <><path d="M15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></>}</svg>
     {!compact && <span>Sound {muted ? 'off' : 'on'}</span>}
   </button>
+}
+const MAX_RECORDING_MS = 15_000
+function micError(err: unknown) {
+  const code = err instanceof GameApiError ? err.code : ''
+  if (code === 'voice_unavailable') return 'Voice needs the server’s OpenAI key. You can still type.'
+  if (code === 'no_speech') return 'The spirit heard only silence. Try again.'
+  return 'Your words were lost in the dark. Try again, or type instead.'
 }
 function time(seconds: number | null) { const n = seconds ?? 180; return `${Math.floor(n / 60).toString().padStart(2, '0')}:${(n % 60).toString().padStart(2, '0')}` }
 
@@ -53,13 +62,6 @@ function Modal({ title, label, children, close }: { title: string; label: string
     <p className="eyebrow">{label}</p><h2>{title}</h2>{children}
   </div></div>
 }
-
-// Title-screen rules. They explain how the game works without giving away how to win.
-const HOW_TO_PLAY: { title: string; text: string; icon: ReactNode }[] = [
-  { title: 'Talk to the ghosts', text: 'Ask anything. They remember everything.', icon: <svg viewBox="0 0 24 24"><path d="M4 5h16v10H9l-5 4z" /></svg> },
-  { title: 'Heed the witch', text: 'Every minute, she lets something slip.', icon: <svg viewBox="0 0 24 24"><path d="M5 10v4M9 7v10M13 4v16M17 8v8M21 11v2" /></svg> },
-  { title: 'Name the spy', text: 'One accusation. Then dawn decides.', icon: <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /></svg> },
-]
 
 type Board = {
   totals: { games: number; escape_rate_pct: number | null; fastest_catch_seconds: number | null; total_whispers: number } | null
@@ -109,6 +111,9 @@ export default function App() {
   const [locked, setLocked] = useState(false)
   const [target, setTarget] = useState<MonsterId | null>(null)
   const [selected, setSelected] = useState<MonsterId | null>(null)
+  const [listening, setListening] = useState<'idle' | 'recording' | 'transcribing'>('idle')
+  const recording = useRef<{ recording: Recording; monsterId: MonsterId; timer: ReturnType<typeof setTimeout> } | null>(null)
+  const micSession = useRef(0)
   const [paused, setPaused] = useState(false)
   const [journal, setJournal] = useState(false)
   const [confirm, setConfirm] = useState(false)
@@ -148,6 +153,12 @@ export default function App() {
   useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current) }, [])
   useEffect(() => { if (overlay) world.current?.unlock() }, [overlay])
   useEffect(() => { try { localStorage.setItem(SOUND_PREFERENCE, String(soundMuted)) } catch {} }, [soundMuted])
+  // Leaving a conversation drops an unfinished spoken question.
+  useEffect(() => () => {
+    micSession.current++
+    if (recording.current) { clearTimeout(recording.current.timer); recording.current.recording.cancel(); recording.current = null }
+    setListening('idle')
+  }, [selected])
   useEffect(() => { historyEnd.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }) }, [game.messages, selected])
 
   function enableSound() { void world.current?.unlockAudio?.() }
@@ -169,6 +180,35 @@ export default function App() {
     if (!selected || !text || game.waitingFor || game.isOver) return
     setMessage('')
     await game.chat(selected, text)
+  }
+  async function toggleMic() {
+    if (listening === 'recording') return finishRecording()
+    if (!selected || listening !== 'idle' || game.waitingFor || game.isOver) return
+    setError(null)
+    const session = ++micSession.current
+    try {
+      const started = await startRecording()
+      if (session !== micSession.current) return started.cancel()
+      recording.current = { recording: started, monsterId: selected, timer: setTimeout(() => void finishRecording(), MAX_RECORDING_MS) }
+      setListening('recording')
+    } catch { if (session === micSession.current) setError('Microphone access was blocked. You can still type.') }
+  }
+  async function finishRecording() {
+    const current = recording.current
+    if (!current) return
+    recording.current = null
+    clearTimeout(current.timer)
+    const session = micSession.current
+    setListening('transcribing')
+    try {
+      const text = await game.transcribe(await current.recording.stop())
+      if (session !== micSession.current) return
+      setListening('idle')
+      await game.chat(current.monsterId, text)
+    } catch (err) {
+      if (session !== micSession.current) return
+      setListening('idle'); setError(micError(err))
+    }
   }
   async function accuse() {
     if (!selected || busy) return
@@ -198,12 +238,6 @@ export default function App() {
         <p className="eyebrow"><span className="fine-line" /> THE FORGOTTEN LIBRARY</p>
         <h1>The Spy<br /><em>Monster.</em></h1>
         <p className="intro-lede">Three ghosts. One secretly reports to the witch. <strong>Catch the spy before dawn.</strong></p>
-        <ol className="intro-steps" aria-label="How to play">
-          {HOW_TO_PLAY.map((step, i) => <li className="card3d intro-step" key={step.title}>
-            <span className="icon-chip" aria-hidden="true">{step.icon}</span>
-            <div><p className="step-num">Step {i + 1}</p><h3>{step.title}</h3><p>{step.text}</p></div>
-          </li>)}
-        </ol>
         <div className="intro-actions">
           {game.state?.phase === 'playing'
             ? <button className="btn3d btn3d-primary" disabled={!ready} onClick={resumeGame}>Resume investigation <span className="btn3d-time">{time(game.secondsLeft)}</span></button>
@@ -237,10 +271,11 @@ export default function App() {
         <div className="dialogue-history" aria-live="polite">
           <p className="spirit-intro">{spirits[selected].description}</p>
           {gameMode ? game.messages.filter(line => line.monsterId === selected).map(line => <div className={`chat-line ${line.role}`} key={line.id}><small>{line.role === 'player' ? 'YOU' : spirits[selected].name.toUpperCase()}</small><p>{line.text}</p></div>) : <div className="explore-invitation"><span className="tiny-star">✧</span><p>Some stories only surface<br />when the investigation begins.</p><button className="button secondary" onClick={startGame} disabled={busy}>{busy ? 'Connecting…' : 'Begin investigation'}<Arrow /></button><small>Starts a live, three-minute game.</small></div>}
+          {gameMode && listening !== 'idle' && <p className="thinking" role="status">{listening === 'recording' ? `${spirits[selected].name} is listening` : 'Catching your words'}<span>…</span></p>}
           {gameMode && game.waitingFor === selected && <p className="thinking" role="status">{spirits[selected].name} is thinking<span>…</span></p>}
           {(error || (gameMode && game.error)) && <p className="inline-error" role="alert">{error || game.error}</p>}<div ref={historyEnd} />
         </div>
-        {gameMode && !game.isOver && <><form onSubmit={send} className="chat-form"><label className="sr-only" htmlFor="message">Ask {spirits[selected].name} a question</label><textarea id="message" rows={2} maxLength={300} value={message} onChange={e => setMessage(e.target.value)} placeholder="What aren’t you telling me?" onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(e) } }} /><div><small>{message.length}/300</small><button type="submit" aria-label="Send message" disabled={!message.trim() || !!game.waitingFor}>Send ↗</button></div></form><button className="accuse-button" onClick={() => setConfirm(true)} disabled={busy || !!game.state?.accusation}>I think you’re the spy <span>→</span></button></>}
+        {gameMode && !game.isOver && <><form onSubmit={send} className="chat-form"><label className="sr-only" htmlFor="message">Ask {spirits[selected].name} a question</label><textarea id="message" rows={2} maxLength={300} value={message} onChange={e => setMessage(e.target.value)} placeholder="What aren’t you telling me?" onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(e) } }} /><div><small>{message.length}/300</small><span className="chat-actions">{canRecord() && <button type="button" className={`mic-button ${listening}`} onClick={() => void toggleMic()} disabled={listening === 'transcribing' || !!game.waitingFor} aria-pressed={listening === 'recording'} aria-label={listening === 'recording' ? 'Stop and send your question' : `Speak to ${spirits[selected].name}`}>{listening === 'recording' ? <><i aria-hidden="true" />Stop</> : <><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3" stroke="currentColor" strokeWidth="1.6" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>{listening === 'transcribing' ? 'Listening…' : 'Speak'}</>}</button>}<button type="submit" aria-label="Send message" disabled={!message.trim() || !!game.waitingFor || listening !== 'idle'}>Send ↗</button></span></div></form><button className="accuse-button" onClick={() => setConfirm(true)} disabled={busy || !!game.state?.accusation}>I think you’re the spy <span>→</span></button></>}
       </aside>}
     </>}
 

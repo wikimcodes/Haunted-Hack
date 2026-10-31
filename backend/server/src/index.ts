@@ -8,7 +8,7 @@ import QRCode from "qrcode"
 
 import { actors } from "../generated/index.js"
 import { archiveGame, leaderboard, startArchiver } from "./archive"
-import { monsterReply, speech, voiceProvider, type Speaker } from "./llm"
+import { canTranscribe, monsterReply, speech, transcribe, voiceProvider, type Speaker } from "./llm"
 import { connectAgent, loadRelayConfig, withRelayRetry } from "./relayConfig"
 import { MONSTER_IDS, MONSTER_NAMES, isMonsterId, type MonsterId, type RelayMeta } from "./types"
 
@@ -16,6 +16,7 @@ const PORT = Number(process.env.PORT ?? 3001)
 const GAME_MS = Number(process.env.GAME_SECONDS ?? 180) * 1000
 const REVEAL_MS = Number(process.env.REVEAL_SECONDS ?? 60) * 1000
 const MAX_MESSAGE_CHARS = 300
+const MAX_AUDIO_BYTES = 2_000_000
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN ?? "*"
 
 const relayConfig = await loadRelayConfig()
@@ -132,6 +133,18 @@ async function runChat(sessionId: string, monsterId: MonsterId, text: string, re
     if (voice) cachedSpeech(`${sessionId}:reply:${requestId}`, monsterId, answer.reply)
 
     return { monsterId, reply: answer.reply, factId: fact.id, source: answer.source, voice }
+}
+
+/** The player's recorded question -> text. The client then sends that text through `chat`. */
+async function transcribeSpeech(req: Request, sessionId: string) {
+    if (!canTranscribe()) throw new HttpError(503, "voice_unavailable")
+    const state = await requireGame(sessionId)
+    if (state.phase !== "playing" || Date.now() >= state.deadlineAt) throw new HttpError(409, "game_over")
+    const audio = await req.arrayBuffer()
+    if (audio.byteLength === 0 || audio.byteLength > MAX_AUDIO_BYTES) throw new HttpError(400, "audio_length")
+    const text = (await transcribe(audio, req.headers.get("content-type") ?? "audio/webm")).slice(0, MAX_MESSAGE_CHARS)
+    if (!text) throw new HttpError(422, "no_speech")
+    return json({ text })
 }
 
 async function accuse(req: Request, sessionId: string) {
@@ -373,11 +386,17 @@ const routes: [string, RegExp, (req: Request, m: RegExpMatchArray) => Promise<Re
     ["GET", /^\/api\/game\/([\w-]+)\/director$/, (_req, m) => director(m[1]!)],
     ["GET", /^\/api\/game\/([\w-]+)\/relay-live$/, (req, m) => relayLive(req, m[1]!)],
     ["GET", /^\/api\/game\/([\w-]+)\/voice\/([\w-]+)$/, (_req, m) => witchVoice(m[1]!, m[2]!)],
+    ["POST", /^\/api\/game\/([\w-]+)\/transcribe$/, (req, m) => transcribeSpeech(req, m[1]!)],
     ["GET", /^\/api\/game\/([\w-]+)\/reply-voice\/([\w-]+)$/, (_req, m) => replyVoice(m[1]!, m[2]!)]
 ]
 
+// Phones only allow the microphone on HTTPS pages. For play over local wifi, point these at a
+// (self-signed) certificate; hosted deployments terminate TLS in front of the server instead.
+const TLS = process.env.TLS_CERT_FILE && process.env.TLS_KEY_FILE ? { cert: Bun.file(process.env.TLS_CERT_FILE), key: Bun.file(process.env.TLS_KEY_FILE) } : undefined
+
 Bun.serve<RelaySocketData>({
     port: PORT,
+    tls: TLS,
     idleTimeout: 30,
     websocket: {
         open(ws) {
@@ -428,5 +447,5 @@ Bun.serve<RelaySocketData>({
     }
 })
 
-console.log(`Spy Monster server on http://localhost:${PORT} (${relayConfig.baseUrl ? "local" : "hosted"} Relay workspace ${relayConfig.workspaceName})`)
+console.log(`Spy Monster server on ${TLS ? "https" : "http"}://localhost:${PORT} (${relayConfig.baseUrl ? "local" : "hosted"} Relay workspace ${relayConfig.workspaceName})`)
 startArchiver(RELAY_MODE)

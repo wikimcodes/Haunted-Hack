@@ -137,6 +137,12 @@ export class GameConnection {
         }
     }
 
+    /** The player's recorded question -> text for the current game. */
+    async transcribe(audio: Blob): Promise<string> {
+        if (!this.#sessionId) throw new Error("no_game")
+        return (await this.api.transcribe(this.#sessionId, audio)).text
+    }
+
     #setWaiting(waiting: MonsterId[], extra: Partial<GameSnapshot> = {}): void {
         this.#set({ ...extra, waiting, waitingFor: waiting[0] ?? null })
     }
