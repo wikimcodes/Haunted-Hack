@@ -169,6 +169,61 @@ async function recentGames() {
     return json(games.filter(Boolean))
 }
 
+// Live Relay feed for the Director screen, read from Relay's durable workspace event log.
+// While the game runs, sender and text are hidden so the screen cannot give the spy away.
+const RELAY_API = relayConfig.workspaceKey.startsWith("rk_") ? "https://cast.agentrelay.com/v1" : "https://armadillo.agentrelay.com/v1"
+
+interface RelayLogEvent {
+    seq: number
+    type: string
+    created_at: string
+    payload?: { message?: { id?: string; agent_name?: string; text?: string } }
+}
+
+async function relayEvents(since?: number): Promise<{ events: RelayLogEvent[]; latestSeq: number }> {
+    const query = since === undefined ? "limit=1" : `since=${since}&limit=100`
+    const res = await withRelayRetry("event log", async () => {
+        const r = await fetch(`${RELAY_API}/workspace/events?${query}`, { headers: { authorization: `Bearer ${relayConfig.workspaceKey}` } })
+        if (!r.ok) throw new Error(`relay events ${r.status}`)
+        return (await r.json()) as { data: { events: RelayLogEvent[]; latest_seq: number } }
+    })
+    return { events: res.data.events, latestSeq: res.data.latest_seq }
+}
+
+async function relayLive(req: Request, sessionId: string) {
+    const state = await requireGame(sessionId)
+    const sinceParam = new URL(req.url).searchParams.get("since")
+    let since = sinceParam === null ? undefined : Number(sinceParam)
+    if (since === undefined || Number.isNaN(since)) {
+        // First call: look back far enough to cover this game.
+        const { latestSeq } = await relayEvents()
+        since = Math.max(0, latestSeq - 100)
+    }
+    const { events, latestSeq } = await relayEvents(since)
+    const playing = state.phase === "playing"
+    const from = state.startedAt - 2000
+    const until = playing ? Infinity : (state.clues.at(-1)?.revealedAt ?? state.deadlineAt) + 15_000
+    const rows = events
+        .filter(e => e.type === "dm.received" && e.payload?.message?.id)
+        .map(e => ({ e, at: Date.parse(e.created_at) }))
+        .filter(({ at }) => at >= from && at <= until)
+        .map(({ e, at }) => {
+            const m = e.payload!.message!
+            const sender = m.agent_name ?? "?"
+            const kind = sender === "gamemaster" ? "handoff" : "whisper"
+            return {
+                seq: e.seq,
+                relayMessageId: m.id!,
+                at,
+                kind,
+                from: playing && kind === "whisper" ? null : sender,
+                text: playing ? null : (m.text ?? null),
+                length: (m.text ?? "").length
+            }
+        })
+    return json({ phase: state.phase, nextSince: Math.max(latestSeq, since), events: rows })
+}
+
 const DIRECTOR_PAGE = fileURLToPath(new URL("../public/director.html", import.meta.url))
 
 // ----- router ----------------------------------------------------------------
@@ -182,7 +237,8 @@ const routes: [string, RegExp, (req: Request, m: RegExpMatchArray) => Promise<Re
     ["POST", /^\/api\/game\/([\w-]+)\/chat$/, (req, m) => chat(req, m[1]!)],
     ["POST", /^\/api\/game\/([\w-]+)\/accuse$/, (req, m) => accuse(req, m[1]!)],
     ["POST", /^\/api\/game\/([\w-]+)\/socket$/, (req, m) => socket(req, m[1]!)],
-    ["GET", /^\/api\/game\/([\w-]+)\/director$/, (_req, m) => director(m[1]!)]
+    ["GET", /^\/api\/game\/([\w-]+)\/director$/, (_req, m) => director(m[1]!)],
+    ["GET", /^\/api\/game\/([\w-]+)\/relay-live$/, (req, m) => relayLive(req, m[1]!)]
 ]
 
 Bun.serve({

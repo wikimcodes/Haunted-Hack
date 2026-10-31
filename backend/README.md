@@ -7,7 +7,17 @@ actor/    Terse project: GameActor (referee + witch + clock) and MonsterActor (e
 server/   Game API (Bun), OpenAI calls, and the Relay agent processes (sprout, pebble, momo, witch)
 ```
 
-## Run it locally (3 terminals)
+## Run it locally
+
+**One command** (after the one-time `bun install` in `actor/` and `server/`):
+
+```bash
+cd backend && bun demo.ts
+```
+
+It starts Terse, the game server and the four agents, creates a Relay workspace if there isn't one, and stops everything on Ctrl+C.
+
+**Or by hand (3 terminals):**
 
 Needs Bun 1.4.2+ (`bun upgrade`) and the Terse CLI (`bunx terse-cli@latest install --yes`).
 
@@ -30,7 +40,7 @@ bun run dev                   # http://localhost:3001
 cd backend/server && bun run agents
 ```
 
-**Director View:** open http://localhost:3001/director on the judges' screen. It lists recent games, stays locked (with a countdown) while a game runs, then shows the outcome, an information-flow graph, every Agent Relay message re-read from Relay, the witch's clues and the Terse event log. Click a clue to light up the Relay report that caused it.
+**Director View:** open http://localhost:3001/director on the judges' screen. It follows the newest game. While a game runs it stays locked with a countdown and a live feed of real Agent Relay messages (senders and words blurred so the spy stays secret), then shows the outcome, an information-flow graph, every Agent Relay message re-read from Relay, the witch's clues and the Terse event log. Click a clue to light up the Relay report that caused it.
 
 Check everything with `bun run smoke` (plays a short game, a forged-report attack and a dawn timeout). `SMOKE_SIDE=0 bun run smoke` runs only the main game.
 
@@ -72,6 +82,7 @@ Open the `websocketUrl` from `/socket` right away (it expires). You receive:
 
 ## Known limits
 
+- Relay's push delivery can lag by 10 to 30 seconds, so agents also poll their own inbox every 1.5s. Messages from before an agent started are ignored.
 - Relay rate-limits bursts (HTTP 429 "workspace busy"). Every Relay call retries with backoff and an idempotency key, so nothing is duplicated. Several games at once can delay whispers by a few seconds.
 - If OpenAI fails or times out (8s), monsters fall back to scripted lines (`source: "fallback"`).
 - Duplicate-request memory is per server process.

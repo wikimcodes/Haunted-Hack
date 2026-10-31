@@ -1,4 +1,4 @@
-import { Actor, Emittable, Persisted, type ActorSocket } from "terse-sdk/actor"
+import { Actor, Emittable, Persisted, type ActorContext, type ActorSocket } from "terse-sdk/actor"
 
 import {
     CLEAR_LINES,
@@ -136,8 +136,13 @@ export class GameActor extends Actor<SocketMeta, Incoming, Cue> {
     @Persisted private clearedMonster: MonsterId | null = null
     @Persisted private seq = 0
 
-    #log(type: string, detail: Record<string, unknown> = {}): void {
+    constructor(context: ActorContext) {
+        super(context)
+        // Schema setup runs once per wake, synchronously, before any call (Terse's migration pattern).
         this.db.exec("CREATE TABLE IF NOT EXISTS events (seq INTEGER PRIMARY KEY, type TEXT, detail TEXT, at INTEGER)")
+    }
+
+    #log(type: string, detail: Record<string, unknown> = {}): void {
         this.seq += 1
         this.db.exec("INSERT INTO events (seq, type, detail, at) VALUES (?, ?, ?, ?)", this.seq, type, JSON.stringify(detail), Date.now())
     }
@@ -430,7 +435,6 @@ export class GameActor extends Actor<SocketMeta, Incoming, Cue> {
     async director(): Promise<DirectorView | null> {
         const state = this.publicState
         if (!state || !this.spyId) return null
-        this.db.exec("CREATE TABLE IF NOT EXISTS events (seq INTEGER PRIMARY KEY, type TEXT, detail TEXT, at INTEGER)")
         const events = this.db.exec("SELECT seq, type, detail, at FROM events ORDER BY seq") as unknown as GameEvent[]
         return {
             spyId: this.spyId,

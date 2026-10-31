@@ -3,7 +3,7 @@
 // monsters over Relay DMs, and, if it is the spy for that session, reports to the witch.
 
 import { actors } from "../../generated/index.js"
-import { connectAgent, withRelayRetry } from "../relayConfig"
+import { connectAgent, pollInbox, withRelayRetry } from "../relayConfig"
 import { MONSTER_NAMES, isMonsterId, type MonsterId, type RelayMeta } from "../types"
 
 const me = process.argv[2]
@@ -23,6 +23,8 @@ const REPORT_LINE = (facts: string[]) => `Mistress, the human has been talking. 
 
 const { relay, agent } = await connectAgent(self)
 const handled = new Set<string>()
+// Ignore anything that was already waiting before this process started (old games).
+const startedAt = Date.now() - 5000
 const log = (...args: unknown[]) => console.log(`[${self}]`, ...args)
 
 async function reportIfSpy(sessionId: string): Promise<void> {
@@ -72,6 +74,7 @@ async function handle(messageId: string): Promise<void> {
     // Fetch the full message: Relay attaches the authenticated sender and our metadata.
     const msg = await withRelayRetry("read", () => agent.messages.get(messageId))
     const from = msg.from?.name
+    if (from === self || (msg.createdAt && Date.parse(msg.createdAt) < startedAt)) return
     const meta = (msg.metadata ?? {}) as Partial<RelayMeta>
     if (!meta.sessionId || !meta.kind) return
     const sessionId = meta.sessionId
@@ -97,10 +100,13 @@ async function handle(messageId: string): Promise<void> {
     }
 }
 
+const dispatch = (id: string) => handle(id).catch(err => log("error handling", id, String(err)))
+
+// Push delivery when it is fast, inbox polling when it is not. `handle` ignores repeats.
 relay.addListener("dm.received", event => {
     const id = event.message.id ?? (event.message as { messageId?: string }).messageId
-    if (!id) return
-    handle(id).catch(err => log("error handling", id, String(err)))
+    if (id) dispatch(id)
 })
+pollInbox(agent, dispatch)
 
 log("online")
