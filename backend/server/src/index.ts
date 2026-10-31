@@ -359,6 +359,8 @@ async function qrCode(req: Request) {
 }
 
 const DIRECTOR_PAGE = fileURLToPath(new URL("../public/director.html", import.meta.url))
+const REDTEAM_PAGE = fileURLToPath(new URL("../public/redteam.html", import.meta.url))
+const REDTEAM_RESULTS = fileURLToPath(new URL("../redteam-results.json", import.meta.url))
 const DIRECTOR_ASSETS: Record<string, { path: string; type: string }> = Object.fromEntries([
     ["director.css", "text/css; charset=utf-8"],
     ["director.js", "text/javascript; charset=utf-8"],
@@ -371,6 +373,12 @@ const DIRECTOR_ASSETS: Record<string, { path: string; type: string }> = Object.f
 const routes: [string, RegExp, (req: Request, m: RegExpMatchArray) => Promise<Response>][] = [
     ["GET", /^\/health$/, async () => json({ ok: true, relayWorkspace: relayConfig.workspaceName, relay: relayConfig.baseUrl ? "local" : "hosted" })],
     ["GET", /^\/director\/?$/, async () => new Response(Bun.file(DIRECTOR_PAGE), { headers: { "content-type": "text/html; charset=utf-8" } })],
+    // Automated red-team report: the page, and the results of the last run (src/redteam.ts).
+    ["GET", /^\/redteam\/?$/, async () => new Response(Bun.file(REDTEAM_PAGE), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } })],
+    ["GET", /^\/api\/redteam$/, async () => {
+        const file = Bun.file(REDTEAM_RESULTS)
+        return (await file.exists()) ? json(await file.json()) : json({ error: "no_red_team_run" }, 404)
+    }],
     ["GET", /^\/(director\.(?:css|js)|director-model\.mjs)$/, async (_req, match) => {
         const asset = DIRECTOR_ASSETS[match[1]!]!
         return new Response(Bun.file(asset.path), { headers: { "content-type": asset.type, "cache-control": "no-cache" } })
