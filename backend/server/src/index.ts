@@ -1,6 +1,8 @@
 // Game API server. Players talk to this over HTTP; live state comes from the Terse WebSocket.
 // The server never holds game state itself: GameActor and MonsterActor are the source of truth.
 
+import { fileURLToPath } from "node:url"
+
 import { actors } from "../generated/index.js"
 import { monsterReply } from "./llm"
 import { connectAgent, loadRelayConfig, withRelayRetry } from "./relayConfig"
@@ -64,6 +66,7 @@ async function startGame(req: Request) {
     const gameMs = input.gameSeconds ? Math.min(Math.max(input.gameSeconds, 30), 900) * 1000 : GAME_MS
     const revealMs = input.revealSeconds ? Math.min(Math.max(input.revealSeconds, 10), 300) * 1000 : REVEAL_MS
     const state = await game(sessionId).start({ gameMs, revealMs })
+    await actors.Lobby.get("main").add(sessionId).catch(err => console.error("[lobby]", String(err)))
     return json(state, 201)
 }
 
@@ -155,10 +158,25 @@ async function director(sessionId: string) {
     return json({ ...view, relay: { workspace: relayConfig.workspaceName, messages: relayMessages } })
 }
 
+async function recentGames() {
+    const recent = await actors.Lobby.get("main").list()
+    const games = await Promise.all(
+        recent.map(async g => {
+            const state = await game(g.sessionId).getPublicState().catch(() => null)
+            return state ? { sessionId: g.sessionId, startedAt: g.startedAt, phase: state.phase, deadlineAt: state.deadlineAt } : null
+        })
+    )
+    return json(games.filter(Boolean))
+}
+
+const DIRECTOR_PAGE = fileURLToPath(new URL("../public/director.html", import.meta.url))
+
 // ----- router ----------------------------------------------------------------
 
 const routes: [string, RegExp, (req: Request, m: RegExpMatchArray) => Promise<Response>][] = [
     ["GET", /^\/health$/, async () => json({ ok: true, relayWorkspace: relayConfig.workspaceName })],
+    ["GET", /^\/director\/?$/, async () => new Response(Bun.file(DIRECTOR_PAGE), { headers: { "content-type": "text/html; charset=utf-8" } })],
+    ["GET", /^\/api\/games\/recent$/, () => recentGames()],
     ["POST", /^\/api\/game\/start$/, req => startGame(req)],
     ["GET", /^\/api\/game\/([\w-]+)$/, async (_req, m) => json(await requireGame(m[1]!))],
     ["POST", /^\/api\/game\/([\w-]+)\/chat$/, (req, m) => chat(req, m[1]!)],

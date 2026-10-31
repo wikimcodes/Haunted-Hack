@@ -30,6 +30,8 @@ bun run dev                   # http://localhost:3001
 cd backend/server && bun run agents
 ```
 
+**Director View:** open http://localhost:3001/director on the judges' screen. It lists recent games, stays locked (with a countdown) while a game runs, then shows the outcome, an information-flow graph, every Agent Relay message re-read from Relay, the witch's clues and the Terse event log. Click a clue to light up the Relay report that caused it.
+
 Check everything with `bun run smoke` (plays a short game, a forged-report attack and a dawn timeout). `SMOKE_SIDE=0 bun run smoke` runs only the main game.
 
 ## API (for the frontend)
@@ -42,6 +44,7 @@ Check everything with `bun run smoke` (plays a short game, a forged-report attac
 | `POST /api/game/:id/accuse` | `{ monsterId }` | `{ outcome, state }` |
 | `POST /api/game/:id/socket` | `{ role: "player" }` | `{ websocketUrl, ... }` (Terse grant) |
 | `GET /api/game/:id/director` | | Full evidence + messages re-read from Relay. `403` while playing |
+| `GET /api/games/recent` | | Last 20 games (kept in a Terse `Lobby` actor) |
 
 `monsterId` is `sprout`, `pebble` or `momo`. Send a fresh `requestId` per chat message; retries with the same id return the same answer.
 

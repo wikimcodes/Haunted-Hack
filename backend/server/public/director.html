@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Director View</title>
+<style>
+  :root {
+    --bg: #101525;
+    --panel: #171d33;
+    --panel-2: #1d2440;
+    --line: #2b3357;
+    --purple: #29203f;
+    --text: #e9e6f5;
+    --muted: #9a98b8;
+    --moon: #78c5d5;
+    --candle: #e6a45f;
+    --lavender: #b58cf2;
+    --mint: #7bcbaa;
+    --rose: #d66b85;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-bottom: 20px; }
+  h1 { font: 600 28px/1.2 Georgia, "Times New Roman", serif; margin: 0; letter-spacing: 0.01em; }
+  h1 small { display: block; font: 500 13px/1.4 -apple-system, sans-serif; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 4px; }
+  .spacer { flex: 1; }
+  select, button {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 10px; padding: 8px 12px; font: inherit; cursor: pointer;
+  }
+  select:focus, button:focus { outline: 2px solid var(--lavender); outline-offset: 2px; }
+
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(12, 1fr); }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; min-width: 0; }
+  .panel h2 { margin: 0 0 4px; font: 600 13px/1.4 -apple-system, sans-serif; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .panel .sub { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
+  .span-12 { grid-column: span 12; }
+  .span-7 { grid-column: span 7; }
+  .span-5 { grid-column: span 5; }
+  .span-6 { grid-column: span 6; }
+  @media (max-width: 900px) { .span-7, .span-5, .span-6 { grid-column: span 12; } }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .stat { background: var(--panel-2); border-radius: 12px; padding: 12px 14px; }
+  .stat .label { color: var(--muted); font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .stat .value { font-size: 22px; font-weight: 600; margin-top: 2px; }
+  .won { color: var(--mint); } .lost, .expired { color: var(--rose); }
+
+  .graph svg { width: 100%; height: auto; display: block; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--muted); font-size: 12px; margin-top: 10px; }
+  .legend span::before { content: ""; display: inline-block; width: 18px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; background: var(--c); }
+  .legend .dash::before { background: repeating-linear-gradient(90deg, var(--c) 0 4px, transparent 4px 7px); }
+
+  .clue {
+    display: block; width: 100%; text-align: left; margin: 0 0 8px; padding: 10px 12px;
+    background: var(--panel-2); border: 1px solid transparent; border-radius: 10px; cursor: pointer; color: var(--text);
+  }
+  .clue:hover { border-color: var(--line); }
+  .clue.active { border-color: var(--lavender); box-shadow: 0 0 0 1px var(--lavender) inset; }
+  .clue .meta { color: var(--muted); font-size: 12px; margin-bottom: 2px; }
+  .tag { display: inline-block; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; background: var(--purple); color: var(--lavender); margin-right: 6px; }
+  .tag.linked { background: rgba(120, 197, 213, 0.15); color: var(--moon); }
+
+  .msg { padding: 10px 12px; border-radius: 10px; margin-bottom: 8px; background: var(--panel-2); border: 1px solid transparent; transition: border-color 0.2s, background 0.2s; }
+  .msg.hl { border-color: var(--moon); background: rgba(120, 197, 213, 0.08); }
+  .msg .route { font-weight: 600; font-size: 14px; }
+  .msg .route .arrow { color: var(--muted); padding: 0 6px; }
+  .msg .text { margin: 4px 0; }
+  .msg .ids { color: var(--muted); font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
+  .msg.report .route { color: var(--candle); }
+  .msg.rejected .route { color: var(--rose); }
+
+  .timeline { list-style: none; margin: 0; padding: 0; max-height: 420px; overflow-y: auto; }
+  .timeline li { display: grid; grid-template-columns: 44px 56px 1fr; gap: 8px; padding: 6px 4px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .timeline li.hl { background: rgba(181, 140, 242, 0.12); }
+  .timeline .seq, .timeline .t { color: var(--muted); font-family: ui-monospace, Menlo, monospace; }
+  .timeline .type { font-family: ui-monospace, Menlo, monospace; font-size: 12px; word-break: break-word; }
+  .timeline .type b { font-weight: 600; color: var(--text); }
+  .timeline .type span { color: var(--muted); }
+
+  .empty { color: var(--muted); padding: 32px 0; text-align: center; }
+  .locked { text-align: center; padding: 64px 16px; }
+  .locked .big { font: 600 22px/1.3 Georgia, serif; margin-bottom: 8px; }
+  .locked .clock { font: 600 44px/1 ui-monospace, Menlo, monospace; color: var(--candle); margin: 16px 0; }
+  .err { color: var(--rose); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><small>The Spy Monster</small>Director View</h1>
+    <div class="spacer"></div>
+    <label>
+      <span class="sr" style="position:absolute;left:-9999px">Game</span>
+      <select id="picker" aria-label="Game"></select>
+    </label>
+    <button id="refresh" type="button">Refresh</button>
+  </header>
+  <main id="root"><div class="empty">Loading…</div></main>
+</div>
+
+<script>
+const API = location.origin
+const MONSTERS = { sprout: "Sprout", pebble: "Pebble", momo: "Momo" }
+const root = document.getElementById("root")
+const picker = document.getElementById("picker")
+let current = new URLSearchParams(location.search).get("game")
+let pollTimer = null
+let clockTimer = null
+
+// ---------- tiny DOM helper (always textContent, never innerHTML for data) ----------
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag)
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") node.className = v
+    else if (k === "on") Object.entries(v).forEach(([evt, fn]) => node.addEventListener(evt, fn))
+    else if (v !== undefined && v !== null) node.setAttribute(k, v)
+  }
+  for (const c of children.flat()) if (c !== null && c !== undefined && c !== false) node.append(c instanceof Node ? c : document.createTextNode(String(c)))
+  return node
+}
+const name = id => MONSTERS[id] || (id === "witch" ? "Witch" : id === "gamemaster" ? "Game master" : id || "?")
+const clockOf = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}` }
+
+// ---------- data ----------
+async function getJSON(path) {
+  const res = await fetch(API + path)
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) { const e = new Error(data.error || res.status); e.status = res.status; throw e }
+  return data
+}
+
+async function loadPicker() {
+  const games = await getJSON("/api/games/recent").catch(() => [])
+  picker.replaceChildren(...games.map(g => {
+    const label = `${g.sessionId} · ${new Date(g.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · ${g.phase}`
+    return el("option", { value: g.sessionId }, label)
+  }))
+  if (!current && games.length) current = (games.find(g => g.phase !== "playing") || games[0]).sessionId
+  if (current && !games.some(g => g.sessionId === current)) picker.prepend(el("option", { value: current }, current))
+  picker.value = current || ""
+}
+
+async function show() {
+  clearTimeout(pollTimer); clearInterval(clockTimer)
+  if (!current) { root.replaceChildren(el("div", { class: "empty" }, "No games yet. Start one from the game.")); return }
+  history.replaceState(null, "", `?game=${encodeURIComponent(current)}`)
+  try {
+    const view = await getJSON(`/api/game/${current}/director`)
+    render(view)
+  } catch (err) {
+    if (err.status === 403) return renderLocked()
+    root.replaceChildren(el("div", { class: "empty err" }, `Could not load ${current}: ${err.message}`))
+  }
+}
+
+async function renderLocked() {
+  const state = await getJSON(`/api/game/${current}`).catch(() => null)
+  const clock = el("div", { class: "clock" }, state ? clockOf(state.deadlineAt - Date.now()) : "--:--")
+  root.replaceChildren(el("section", { class: "panel locked" },
+    el("div", { class: "big" }, "The game is still running"),
+    el("div", {}, "The Director View unlocks the moment the game ends, so nobody can peek at the spy."),
+    clock,
+    el("div", { class: "sub" }, state ? `Round ${state.round} · ${state.clues.length} clue${state.clues.length === 1 ? "" : "s"} revealed` : "")
+  ))
+  if (state) clockTimer = setInterval(() => { clock.textContent = clockOf(state.deadlineAt - Date.now()) }, 500)
+  pollTimer = setTimeout(show, 2000)
+}
+
+// ---------- render ----------
+function render(v) {
+  const pub = v.public
+  const relayById = Object.fromEntries((v.relay?.messages || []).map(m => [m.id, m]))
+  const t0 = pub.startedAt
+  const endedAt = (pub.clues.find(c => c.kind === "ending") || {}).revealedAt || pub.accusation?.at || pub.deadlineAt
+
+  // Build a unified list of private messages with their route, from the actor's records,
+  // enriched with what Relay itself returned for each message ID.
+  const messages = []
+  for (const g of v.gossip) {
+    if (!g.relayMessageId) continue
+    messages.push({ kind: "gossip", id: g.relayMessageId, from: g.from, to: g.to, factIds: g.factIds, at: g.createdAt, relay: relayById[g.relayMessageId] })
+  }
+  for (const r of v.reports) messages.push({ kind: "report", id: r.relayMessageId, from: r.sourceMonsterId, to: "witch", factIds: r.factIds, at: r.receivedAt, relay: relayById[r.relayMessageId], reportId: r.id })
+  for (const r of v.rejectedReports) messages.push({ kind: "rejected", id: r.relayMessageId, from: r.from, to: "witch", factIds: [], at: r.at, relay: relayById[r.relayMessageId], reason: r.reason || "not_spy" })
+  messages.sort((a, b) => a.at - b.at)
+
+  // ----- Panel D: outcome -----
+  const result = pub.phase === "won" ? "Escaped" : pub.phase === "lost" ? "Caught" : "Dawn came"
+  const outcome = el("section", { class: "panel span-12" },
+    el("h2", {}, "Outcome"),
+    el("p", { class: "sub" }, `Game ${pub.sessionId} · Relay workspace ${v.relay?.workspace || "?"}`),
+    el("div", { class: "stats" },
+      stat("The spy", name(v.spyId), "lost"),
+      stat("Player accused", pub.accusation ? name(pub.accusation.monsterId) : "Nobody"),
+      stat("Result", result, pub.phase),
+      stat("Duration", clockOf(endedAt - t0)),
+      stat("Relay whispers", String(v.gossip.filter(g => g.relayMessageId).length)),
+      stat("Spy reports", `${v.reports.length} accepted`),
+      stat("Fake reports blocked", String(v.rejectedReports.filter(r => (r.reason || "not_spy") === "not_spy").length)),
+      stat("Clues revealed", String(pub.clues.filter(c => c.kind !== "ending").length))
+    )
+  )
+
+  // ----- Panel C: information flow -----
+  const graph = el("section", { class: "panel span-7 graph" },
+    el("h2", {}, "Information flow"),
+    el("p", { class: "sub" }, "Built from this game's real evidence. Line thickness = number of messages."),
+    flowGraph(v, messages),
+    el("div", { class: "legend" },
+      el("span", { style: "--c: var(--muted)" }, "Player told"),
+      el("span", { style: "--c: var(--lavender)" }, "Gossip (Relay DM)"),
+      el("span", { style: "--c: var(--candle)" }, "Spy report (Relay DM)"),
+      el("span", { class: "dash", style: "--c: var(--rose)" }, "Rejected report"),
+      el("span", { style: "--c: var(--moon)" }, "Witch reveal")
+    )
+  )
+
+  // ----- Panel A: Relay messages -----
+  const msgNodes = new Map()
+  const relayPanel = el("section", { class: "panel span-5" },
+    el("h2", {}, "Agent Relay messages"),
+    el("p", { class: "sub" }, "Re-read from Agent Relay after the game. Sender is authenticated by Relay."),
+    messages.length ? messages.map(m => {
+      const relayText = m.relay?.text ?? null
+      const relayFrom = m.relay?.from ?? m.from
+      const node = el("div", { class: `msg ${m.kind}` },
+        el("div", { class: "route" }, name(relayFrom), el("span", { class: "arrow" }, "→"), name(m.to),
+          m.kind === "report" ? el("span", { class: "tag", style: "margin-left:8px" }, "report") : null,
+          m.kind === "rejected" ? el("span", { class: "tag", style: "margin-left:8px" }, m.reason === "game_over" ? "too late: game over" : "rejected: not the spy") : null),
+        el("div", { class: "text" }, relayText ?? "(message text unavailable from Relay)"),
+        el("div", { class: "ids" }, `relay msg ${m.id} · +${clockOf(m.at - t0)}${m.relay?.error ? " · relay read failed" : ""}`)
+      )
+      msgNodes.set(m.id, { node, msg: m })
+      return node
+    }) : el("div", { class: "empty" }, "No private messages this game.")
+  )
+
+  // ----- Panel B: clues + Terse timeline -----
+  const eventNodes = []
+  const timeline = el("ul", { class: "timeline" }, v.events.map(e => {
+    let detail = {}
+    try { detail = JSON.parse(e.detail || "{}") } catch {}
+    const extras = Object.entries(detail).map(([k, val]) => `${k}=${Array.isArray(val) ? val.join(",") : val}`).join(" ")
+    const li = el("li", {}, el("span", { class: "seq" }, `#${e.seq}`), el("span", { class: "t" }, `+${clockOf(e.at - t0)}`),
+      el("span", { class: "type" }, el("b", {}, e.type), " ", el("span", {}, extras)))
+    eventNodes.push({ li, e, detail })
+    return li
+  }))
+
+  const clueButtons = pub.clues.filter(c => c.kind !== "ending").map(c => {
+    const ev = v.evidence.find(x => x.clueId === c.id)
+    const linked = ev && ev.relayMessageIds.length
+    const btn = el("button", { class: "clue", type: "button", on: { click: () => select(c, ev, btn) } },
+      el("div", { class: "meta" }, el("span", { class: `tag ${linked ? "linked" : ""}` }, linked ? "from a Relay report" : c.kind), `Round ${c.round} · +${clockOf(c.revealedAt - t0)}`),
+      el("div", {}, c.content)
+    )
+    return btn
+  })
+
+  function select(clue, ev, btn) {
+    clueButtons.forEach(b => b.classList.toggle("active", b === btn))
+    const reportIds = new Set(ev?.relayMessageIds || [])
+    // Follow the facts back: the report, plus any gossip that carried those facts to the spy.
+    const reports = messages.filter(m => reportIds.has(m.id))
+    const spy = reports[0]?.from
+    const facts = new Set(reports.flatMap(m => m.factIds))
+    const fed = msg => msg.kind === "gossip" && msg.to === spy && msg.factIds.some(f => facts.has(f))
+    msgNodes.forEach(({ node, msg }) => node.classList.toggle("hl", Boolean(reportIds.has(msg.id) || fed(msg))))
+    eventNodes.forEach(({ li, detail }) => li.classList.toggle("hl", Boolean(detail.clueId === clue.id || (detail.relayMessageId && reportIds.has(detail.relayMessageId)))))
+    const first = [...msgNodes.values()].find(x => x.node.classList.contains("hl"))
+    if (first) first.node.scrollIntoView({ behavior: "smooth", block: "nearest" })
+  }
+
+  const cluesPanel = el("section", { class: "panel span-6" },
+    el("h2", {}, "The witch's clues"),
+    el("p", { class: "sub" }, "Click a clue to light up the Relay message that caused it."),
+    clueButtons.length ? clueButtons : el("div", { class: "empty" }, "No clues were revealed.")
+  )
+  const timelinePanel = el("section", { class: "panel span-6" },
+    el("h2", {}, "Terse state timeline"),
+    el("p", { class: "sub" }, `GameActor event log (SQLite inside the actor) · ${v.events.length} events`),
+    timeline
+  )
+
+  root.replaceChildren(el("div", { class: "grid" }, outcome, graph, relayPanel, cluesPanel, timelinePanel))
+}
+
+function stat(label, value, cls) {
+  return el("div", { class: "stat" }, el("div", { class: "label" }, label), el("div", { class: `value ${cls || ""}` }, value))
+}
+
+// ---------- SVG flow graph ----------
+function flowGraph(v, messages) {
+  const NS = "http://www.w3.org/2000/svg"
+  const s = (tag, attrs = {}, ...kids) => { const n = document.createElementNS(NS, tag); Object.entries(attrs).forEach(([k, val]) => n.setAttribute(k, val)); kids.forEach(k => n.append(k)); return n }
+  const W = 640, H = 400
+  const pos = { player: [270, 52], sprout: [80, 200], pebble: [270, 200], momo: [460, 200], witch: [270, 348] }
+  const svg = s("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Information flow between player, monsters and witch" })
+  const defs = s("defs")
+  for (const [id, color] of [["muted", "#9a98b8"], ["lav", "#b58cf2"], ["candle", "#e6a45f"], ["rose", "#d66b85"], ["moon", "#78c5d5"]]) {
+    defs.append(s("marker", { id: `ar-${id}`, viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" }, s("path", { d: "M0,0 L10,5 L0,10 z", fill: color })))
+  }
+  svg.append(defs)
+
+  const R = 34
+  function edge(from, to, color, marker, count, { dashed = false, bend = 0, label } = {}) {
+    if (!count) return
+    const [x1, y1] = pos[from], [x2, y2] = pos[to]
+    const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy)
+    const ux = dx / len, uy = dy / len
+    const sx = x1 + ux * R, sy = y1 + uy * R, ex = x2 - ux * (R + 4), ey = y2 - uy * (R + 4)
+    const mx = (sx + ex) / 2 - uy * bend, my = (sy + ey) / 2 + ux * bend
+    svg.append(s("path", { d: `M${sx},${sy} Q${mx},${my} ${ex},${ey}`, fill: "none", stroke: color, "stroke-width": String(Math.min(2 + count * 1.5, 8)), "stroke-linecap": "round", "marker-end": `url(#ar-${marker})`, ...(dashed ? { "stroke-dasharray": "6 6" } : {}), opacity: "0.9" }))
+    const lx = (sx + 2 * mx + ex) / 4, ly = (sy + 2 * my + ey) / 4
+    const t = s("text", { x: lx, y: ly - 6, fill: color, "font-size": "13", "text-anchor": "middle", "font-weight": "600" })
+    t.textContent = label ?? `×${count}`
+    svg.append(t)
+  }
+
+  // Player -> monsters (facts told)
+  for (const m of ["sprout", "pebble", "momo"]) edge("player", m, "#9a98b8", "muted", v.facts.filter(f => f.toldTo === m).length)
+  // Gossip between monsters (bend so A->B and B->A do not overlap)
+  const pairs = {}
+  messages.filter(m => m.kind === "gossip").forEach(m => { const k = `${m.from}>${m.to}`; pairs[k] = (pairs[k] || 0) + 1 })
+  Object.entries(pairs).forEach(([k, n]) => { const [a, b] = k.split(">"); const far = Math.abs(pos[a][0] - pos[b][0]) > 250; edge(a, b, "#b58cf2", "lav", n, { bend: far ? 70 : 34 }) })
+  // Reports to the witch
+  const reportCounts = {}, rejectCounts = {}
+  messages.filter(m => m.kind === "report").forEach(m => { reportCounts[m.from] = (reportCounts[m.from] || 0) + 1 })
+  messages.filter(m => m.kind === "rejected" && m.reason !== "game_over").forEach(m => { rejectCounts[m.from] = (rejectCounts[m.from] || 0) + 1 })
+  Object.entries(reportCounts).forEach(([m, n]) => edge(m, "witch", "#e6a45f", "candle", n))
+  Object.entries(rejectCounts).forEach(([m, n]) => { if (pos[m]) edge(m, "witch", "#d66b85", "rose", n, { dashed: true, bend: -28, label: `×${n} rejected` }) })
+  // Witch -> player reveals (drawn along the right side)
+  const reveals = v.public.clues.filter(c => c.kind !== "ending").length
+  if (reveals) {
+    svg.append(s("path", { d: "M302,336 C640,336 640,64 306,54", fill: "none", stroke: "#78c5d5", "stroke-width": String(Math.min(2 + reveals, 7)), "marker-end": "url(#ar-moon)", opacity: "0.75", "stroke-dasharray": "2 6", "stroke-linecap": "round" }))
+    const t = s("text", { x: "588", y: "204", fill: "#78c5d5", "font-size": "13", "text-anchor": "middle", "font-weight": "600" }); t.textContent = `${reveals} clue${reveals === 1 ? "" : "s"}`; svg.append(t)
+  }
+
+  // Nodes
+  const fills = { player: "#1d2440", sprout: "#3a2f5c", pebble: "#234a43", momo: "#4a2f3a", witch: "#29203f" }
+  for (const [id, [x, y]] of Object.entries(pos)) {
+    const isSpy = id === v.spyId
+    svg.append(s("circle", { cx: x, cy: y, r: R, fill: fills[id], stroke: isSpy ? "#d66b85" : id === "witch" ? "#b58cf2" : "#2b3357", "stroke-width": isSpy ? "4" : "2" }))
+    const t = s("text", { x, y: y + 5, fill: "#e9e6f5", "font-size": "14", "font-weight": "600", "text-anchor": "middle" }); t.textContent = id === "player" ? "Player" : name(id); svg.append(t)
+    if (isSpy) { const b = s("text", { x, y: y + R + 18, fill: "#d66b85", "font-size": "12", "font-weight": "700", "text-anchor": "middle", "letter-spacing": "0.08em" }); b.textContent = "SPY"; svg.append(b) }
+  }
+  return svg
+}
+
+// ---------- wiring ----------
+picker.addEventListener("change", () => { current = picker.value; show() })
+document.getElementById("refresh").addEventListener("click", async () => { await loadPicker(); show() })
+loadPicker().then(show)
+</script>
+</body>
+</html>

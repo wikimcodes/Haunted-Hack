@@ -104,7 +104,7 @@ export interface DirectorView {
     facts: Fact[]
     gossip: Gossip[]
     reports: WitchReport[]
-    rejectedReports: { from: string; relayMessageId: string; at: number }[]
+    rejectedReports: { from: string; relayMessageId: string; at: number; reason: "not_spy" | "game_over" }[]
     evidence: ClueEvidence[]
     events: GameEvent[]
     public: PublicGameState
@@ -131,7 +131,7 @@ export class GameActor extends Actor<SocketMeta, Incoming, Cue> {
     @Persisted private knowledge: Record<string, string[]> = {}
     @Persisted private gossip: Gossip[] = []
     @Persisted private reports: WitchReport[] = []
-    @Persisted private rejectedReports: { from: string; relayMessageId: string; at: number }[] = []
+    @Persisted private rejectedReports: { from: string; relayMessageId: string; at: number; reason: "not_spy" | "game_over" }[] = []
     @Persisted private evidence: ClueEvidence[] = []
     @Persisted private clearedMonster: MonsterId | null = null
     @Persisted private seq = 0
@@ -398,8 +398,9 @@ export class GameActor extends Actor<SocketMeta, Incoming, Cue> {
         const state = this.#requireState()
         if (this.reports.some(r => r.relayMessageId === relayMessageId)) return { accepted: true }
         if (!isMonsterId(relayFrom) || relayFrom !== this.spyId || !this.#isLive(state)) {
-            this.rejectedReports = [...this.rejectedReports, { from: relayFrom, relayMessageId, at: Date.now() }]
-            this.#log("WITCH_REPORT_REJECTED", { relayFrom, relayMessageId })
+            const reason = relayFrom === this.spyId ? "game_over" : "not_spy"
+            this.rejectedReports = [...this.rejectedReports, { from: relayFrom, relayMessageId, at: Date.now(), reason }]
+            this.#log("WITCH_REPORT_REJECTED", { relayFrom, relayMessageId, reason })
             return { accepted: false }
         }
         const known = new Set(this.knowledge[relayFrom] ?? [])
@@ -490,5 +491,22 @@ export class MonsterActor extends Actor {
     async hearRumour(from: string, text: string, relayMessageId: string): Promise<void> {
         if (!isMonsterId(from) || this.rumours.some(r => r.relayMessageId === relayMessageId)) return
         this.rumours = [...this.rumours, { from, text: clip(text, MAX_GOSSIP_CHARS), relayMessageId, at: Date.now() }]
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Lobby: a single actor ("main") that remembers recent games for the Director screen.
+// ---------------------------------------------------------------------------
+
+export class Lobby extends Actor {
+    @Persisted private recent: { sessionId: string; startedAt: number }[] = []
+
+    async add(sessionId: string): Promise<void> {
+        if (this.recent.some(g => g.sessionId === sessionId)) return
+        this.recent = [{ sessionId, startedAt: Date.now() }, ...this.recent].slice(0, 20)
+    }
+
+    async list(): Promise<{ sessionId: string; startedAt: number }[]> {
+        return this.recent
     }
 }

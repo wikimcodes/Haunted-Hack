@@ -1,6 +1,8 @@
 // Relay credentials live in .relay.json (gitignored), written once by `bun run setup:relay`.
 // Each agent process only ever reads its own token from here.
 
+import { fileURLToPath } from "node:url"
+
 import { AgentRelay } from "@agent-relay/sdk"
 
 export const AGENT_NAMES = ["gamemaster", "witch", "sprout", "pebble", "momo"] as const
@@ -12,7 +14,7 @@ export interface RelayConfig {
     tokens: Record<AgentName, string>
 }
 
-const CONFIG_PATH = new URL("../.relay.json", import.meta.url).pathname
+const CONFIG_PATH = fileURLToPath(new URL("../.relay.json", import.meta.url))
 
 export async function loadRelayConfig(): Promise<RelayConfig> {
     const file = Bun.file(CONFIG_PATH)
