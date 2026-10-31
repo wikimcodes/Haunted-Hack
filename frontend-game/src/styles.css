@@ -180,3 +180,53 @@ a.button { text-decoration: none; }
 }
 
 .sound-hint { display: block; margin-top: 6px; color: #b8bdae; }
+
+/* ---------- Title screen: Moya 3D material on the game palette ----------
+   Solid-edge cards (2px border + solid bottom edge, no blur), pressable 3D buttons,
+   gold as the single accent, 16px card padding, 12px gaps, 1.5 line-height. */
+:root { --card3d: #17201f; --card3d-border: #2a3633; --card3d-edge: #090d0d; --gold-edge: #8b7048; --chip: #c5a77624; }
+.lobby .intro > .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .18em; }
+.lobby h1 { font-weight: 600; letter-spacing: -.015em; line-height: .92; margin: 18px 0 0; }
+.lobby h1 em { font-weight: 500; }
+.intro-lede { margin: 22px 0 0; max-width: 30ch; font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 500; font-size: clamp(22px, 2.4vw, 26px); line-height: 1.3; color: var(--cream); text-wrap: balance; }
+.intro-lede strong { font-weight: 600; color: #f2eee1; }
+.card3d { background: var(--card3d); border: 2px solid var(--card3d-border); border-radius: 16px; box-shadow: 0 5px 0 var(--card3d-edge); padding: 16px; }
+.intro-steps { list-style: none; margin: 30px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; max-width: 560px; }
+.intro-step { display: flex; flex-direction: column; gap: 14px; }
+.icon-chip { width: 40px; height: 40px; flex: none; border-radius: 50%; background: var(--chip); display: grid; place-items: center; }
+.icon-chip svg { width: 20px; height: 20px; stroke: var(--gold); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.icon-chip.small { width: 32px; height: 32px; }
+.icon-chip.small svg { width: 16px; height: 16px; }
+.step-num { margin: 0 0 4px; font-size: 11px; line-height: 1.2; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+.intro-step h3 { margin: 0 0 4px; font-family: 'DM Sans', sans-serif; font-size: 16px; line-height: 1.3; font-weight: 600; color: #f2eee1; }
+.intro-step p:last-child { margin: 0; font-size: 14px; line-height: 1.5; color: var(--muted); text-wrap: pretty; }
+.lobby .intro-actions { margin-top: 30px; flex-direction: row; flex-wrap: wrap; max-width: none; gap: 12px; }
+.btn3d { appearance: none; cursor: pointer; min-height: 56px; padding: 0 22px; border-radius: 14px; display: inline-flex; align-items: center; gap: 14px; font: 600 16px/1 'DM Sans', sans-serif; letter-spacing: .005em; transition: transform 80ms ease, box-shadow 80ms ease; }
+.btn3d:disabled { cursor: default; opacity: .6; }
+.btn3d:active:not(:disabled) { transform: translateY(3px); }
+.btn3d:focus-visible { outline: 2px solid var(--cream); outline-offset: 3px; }
+.btn3d-primary { background: var(--gold); color: #101818; border: 2px solid #d6bd92; box-shadow: 0 5px 0 var(--gold-edge); }
+.btn3d-primary:active:not(:disabled) { box-shadow: 0 2px 0 var(--gold-edge); }
+.btn3d-time { font-variant-numeric: tabular-nums; padding: 6px 10px; border-radius: 8px; background: #10181824; font-weight: 700; font-size: 14px; }
+.btn3d-secondary { background: var(--card3d); color: var(--cream); border: 2px solid var(--card3d-border); box-shadow: 0 5px 0 var(--card3d-edge); }
+.btn3d-secondary:active:not(:disabled) { box-shadow: 0 2px 0 var(--card3d-edge); }
+.btn3d-secondary svg { width: 18px; height: 18px; stroke: var(--gold); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.intro-sound { margin: 22px 0 0; display: flex; align-items: center; gap: 14px; font-size: 14px; line-height: 1.5; color: var(--muted); }
+.lobby-footer span:first-child { letter-spacing: .14em; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+.lobby-footer { font-size: 11px; font-weight: 600; letter-spacing: .14em; }
+.board-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 20px; }
+.board-value { margin: 0; font-family: 'Cormorant Garamond', Georgia, serif; font-size: 32px; line-height: 1.15; font-weight: 600; color: #f2eee1; font-variant-numeric: tabular-nums; }
+.board-note { margin-top: 18px; font-size: 14px; line-height: 1.5; color: var(--muted); }
+@media (max-width: 720px) {
+  .intro-steps { grid-template-columns: 1fr; }
+  .intro-step { flex-direction: row; align-items: flex-start; }
+  .lobby .intro-actions { flex-direction: column; }
+  .btn3d { width: 100%; justify-content: space-between; }
+  .btn3d-secondary { justify-content: flex-start; }
+}
+.lobby .intro { max-width: 580px; }
+@media (max-width: 720px) { .lobby .intro { margin: 40px 24px 120px; max-width: none; } }
+/* Title screen fits a laptop screen; the footer follows the content instead of overlapping it. */
+.lobby h1 { font-size: clamp(56px, 7vw, 104px); }
+.lobby .intro { margin-top: min(6vh, 64px); margin-bottom: 48px; }
+.lobby .lobby-footer { position: relative; left: auto; right: auto; bottom: auto; margin: 0 4.8vw 29px; }

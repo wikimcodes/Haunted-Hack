@@ -54,6 +54,46 @@ function Modal({ title, label, children, close }: { title: string; label: string
   </div></div>
 }
 
+// Title-screen rules. They explain how the game works without giving away how to win.
+const HOW_TO_PLAY: { title: string; text: string; icon: ReactNode }[] = [
+  { title: 'Talk to the ghosts', text: 'Ask anything. They remember everything.', icon: <svg viewBox="0 0 24 24"><path d="M4 5h16v10H9l-5 4z" /></svg> },
+  { title: 'Heed the witch', text: 'Every minute, she lets something slip.', icon: <svg viewBox="0 0 24 24"><path d="M5 10v4M9 7v10M13 4v16M17 8v8M21 11v2" /></svg> },
+  { title: 'Name the spy', text: 'One accusation. Then dawn decides.', icon: <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /></svg> },
+]
+
+type Board = {
+  totals: { games: number; escape_rate_pct: number | null; fastest_catch_seconds: number | null; total_whispers: number } | null
+  monsters: { monster: MonsterId; times_spy: number; got_away_pct: number | null }[]
+  disabled?: boolean
+}
+
+// All-games stats, archived to Supabase by the game server.
+function Leaderboard({ apiUrl, close }: { apiUrl: string; close: () => void }) {
+  const [board, setBoard] = useState<Board | null>(null)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    let live = true
+    fetch(`${apiUrl.replace(/\/$/, '')}/api/leaderboard`).then(r => r.json()).then((b: Board) => live && setBoard(b)).catch(() => live && setFailed(true))
+    return () => { live = false }
+  }, [apiUrl])
+  const t = board?.totals
+  const top = board?.monsters[0]
+  const stats: [string, string][] = t ? [
+    ['Games played', String(t.games)],
+    ['Players escaped', t.escape_rate_pct === null ? '-' : `${t.escape_rate_pct}%`],
+    ['Fastest catch', t.fastest_catch_seconds === null ? '-' : time(t.fastest_catch_seconds)],
+    ['Most deceptive', top ? `${spirits[top.monster]?.name ?? top.monster}` : '-'],
+  ] : []
+  return <Modal label="EVERY GAME SO FAR" title="The library remembers." close={close}>
+    {failed || board?.disabled ? <p>The leaderboard is resting. Play a game and check back.</p>
+      : !t ? <p role="status">Opening the records…</p>
+      : <>
+        <div className="board-stats">{stats.map(([label, value]) => <div className="card3d board-stat" key={label}><p className="step-num">{label}</p><p className="board-value">{value}</p></div>)}</div>
+        {top && <p className="board-note">{spirits[top.monster]?.name ?? top.monster} got away {top.got_away_pct ?? 0}% of the times it was the spy. {t.total_whispers} whispers have passed between the ghosts.</p>}
+      </>}
+  </Modal>
+}
+
 export default function App() {
   const world = useRef<WorldHandle>(null)
   const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001'
@@ -61,6 +101,7 @@ export default function App() {
   // Mute silences the library sounds and every spoken line (witch clues and ghost replies).
   const game = useSpyMonster({ apiUrl, autoResume: true, voices: !soundMuted })
   const [mode, setMode] = useState<'lobby' | 'explore' | 'game'>('lobby')
+  const [boardOpen, setBoardOpen] = useState(false)
   const [ready, setReady] = useState(false)
   const [progress, setProgress] = useState(0)
   const [sceneError, setSceneError] = useState<string | null>(null)
@@ -156,17 +197,26 @@ export default function App() {
       <div className="intro">
         <p className="eyebrow"><span className="fine-line" /> THE FORGOTTEN LIBRARY</p>
         <h1>The Spy<br /><em>Monster.</em></h1>
-        <p className="intro-copy">Three spirits. One hidden traitor.<br />Find the secret before the library sees dawn.</p>
+        <p className="intro-lede">Three ghosts. One secretly reports to the witch. <strong>Catch the spy before dawn.</strong></p>
+        <ol className="intro-steps" aria-label="How to play">
+          {HOW_TO_PLAY.map((step, i) => <li className="card3d intro-step" key={step.title}>
+            <span className="icon-chip" aria-hidden="true">{step.icon}</span>
+            <div><p className="step-num">Step {i + 1}</p><h3>{step.title}</h3><p>{step.text}</p></div>
+          </li>)}
+        </ol>
         <div className="intro-actions">
-          <button className="button primary" disabled={!ready || !!sceneError} onClick={explore}>{ready ? 'Explore the library' : 'Opening the library…'}<Arrow /></button>
-          {game.state?.phase === 'playing' ? <button className="button secondary" disabled={!ready} onClick={resumeGame}>Resume investigation <span>{time(game.secondsLeft)}</span></button> : <button className="button secondary" disabled={!ready || busy || !!sceneError} onClick={startGame}>{busy ? 'Connecting…' : 'Begin investigation'}<span>03:00</span></button>}
+          {game.state?.phase === 'playing'
+            ? <button className="btn3d btn3d-primary" disabled={!ready} onClick={resumeGame}>Resume investigation <span className="btn3d-time">{time(game.secondsLeft)}</span></button>
+            : <button className="btn3d btn3d-primary" disabled={!ready || busy || !!sceneError} onClick={startGame}>{busy ? 'Connecting…' : ready ? 'Begin investigation' : 'Opening the library…'}<span className="btn3d-time">3:00</span></button>}
+          <button className="btn3d btn3d-secondary" onClick={() => setBoardOpen(true)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 20V11M12 20V5M18 20v-6" /></svg>Leaderboard</button>
         </div>
-        <p className="intro-note">Explore freely, or begin a three-minute game with the spirits.<span className="sound-hint">{soundMuted ? 'Sound is muted.' : 'Sound begins when you enter.'}</span></p>
+        <p className="intro-sound"><span className="icon-chip small" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6L8 10zM16 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12" /></svg></span>{soundMuted ? 'Sound is muted. Turn it on: the witch speaks.' : 'Turn your sound on. The witch speaks.'}</p>
         {error && <p className="inline-error" role="alert">{error}</p>}
         {sceneError && <div className="inline-error" role="alert"><p>{sceneError}</p><button className="text-button" onClick={() => { setSceneError(null); setReady(false); setProgress(0); setLoadingKey(k => k + 1) }}>Retry loading ↗</button></div>}
         {!ready && !sceneError && <div className="load-progress" aria-label="Loading 3D library" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)}><span style={{ width: `${Math.max(2, progress)}%` }} /><small>PREPARING THE SPACE <b>{Math.round(progress)}%</b></small></div>}
       </div>
-      <footer className="lobby-footer"><span><i /> A place between candlelight and dawn.</span><span>WALK · LISTEN · SUSPECT</span></footer>
+      <footer className="lobby-footer"><span><i /> Live AI ghosts · Real agent-to-agent whispers</span><span>TERSE · AGENT RELAY · OPENAI · SUPABASE</span></footer>
+      {boardOpen && <Leaderboard apiUrl={apiUrl} close={() => setBoardOpen(false)} />}
     </section> : <>
       <header className="hud-top">
         <button className="hud-brand" onClick={() => setPaused(true)} aria-label="Open menu"><Mark /><span>The Spy Monster<small>{gameMode ? 'THE INVESTIGATION' : 'THE FORGOTTEN LIBRARY'}</small></span></button>
