@@ -189,7 +189,7 @@ test("game client lifecycle and actual API contract", async t => {
         } finally { connection.close(); env.restore() }
     })
 
-    await t.test("ghost replies are spoken in turn, and muting stops and skips them", async () => {
+    await t.test("ghost replies play on the shared player, newest first, and muting stops them", async () => {
         const bodies: { requestId: string; voice: boolean }[] = []
         const env = environment(async (input, options) => {
             const url = String(input)
@@ -201,11 +201,12 @@ test("game client lifecycle and actual API contract", async t => {
             if (url.endsWith("/socket")) return json({ websocketUrl: "ws://current" })
             return json(state("one"))
         })
-        const played: { src: string; paused: boolean }[] = []
+        const players: FakeAudio[] = [], played: string[] = []
         class FakeAudio {
-            paused = false
-            constructor(readonly src: string) { played.push(this) }
-            play() { return Promise.resolve() }
+            src = ""; paused = true; preload = ""
+            constructor(src?: string) { if (src) this.src = src; players.push(this) }
+            addEventListener() {}
+            play() { this.paused = false; played.push(this.src); return Promise.resolve() }
             pause() { this.paused = true }
         }
         const previousAudio = Object.getOwnPropertyDescriptor(globalThis, "Audio")
@@ -215,13 +216,14 @@ test("game client lifecycle and actual API contract", async t => {
             await connection.resume("one")
             await connection.chat("sprout", "hello")
             await connection.chat("momo", "and you?")
-            assert.deepEqual(played.map(a => a.src), bodies.map(b => `http://api.test/api/game/one/reply-voice/${b.requestId}`))
-            assert.deepEqual(played.map(a => a.paused), [true, false], "a newer reply interrupts the previous one")
+            const voiceUrl = (b: { requestId: string }) => `http://api.test/api/game/one/reply-voice/${b.requestId}`
+            assert.equal(players.length, 1, "every line goes through the one tap-unlocked player")
+            assert.deepEqual(played.filter(src => !src.startsWith("data:")), bodies.map(voiceUrl), "a newer reply replaces the one still playing")
             connection.setVoices(false)
-            assert.equal(played[1]!.paused, true, "muting stops the current line")
+            assert.equal(players[0]!.paused, true, "muting stops the current line")
             await connection.chat("pebble", "quiet now")
             assert.equal(bodies.at(-1)!.voice, false, "a muted client does not ask the server to spend a voice")
-            assert.equal(played.length, 2)
+            assert.equal(played.filter(src => !src.startsWith("data:")).length, 2)
         } finally {
             connection.close(); env.restore()
             if (previousAudio) Object.defineProperty(globalThis, "Audio", previousAudio)
