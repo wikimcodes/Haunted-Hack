@@ -13,7 +13,7 @@ export const MONSTERS: Record<MonsterId, { name: string; personality: string; go
 }
 
 export const DEFAULT_GAME_MS = 180_000
-export const DEFAULT_REVEAL_MS = 60_000
+export const DEFAULT_REVEAL_MS = 30_000
 export const GOSSIP_PER_ROUND = 1
 export const MAX_FACT_CHARS = 140
 export const MAX_GOSSIP_CHARS = 280

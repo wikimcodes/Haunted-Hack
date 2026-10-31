@@ -254,6 +254,31 @@ function actorIdentity(id, label = nameOf(id)) {
   return el('span', { class: 'route-actor' }, image, el('span', {}, label))
 }
 
+// Automated red-team results, shown on every game (including live ones) so they're always on screen.
+let redTeamData
+function redTeamCard() {
+  const card = el('section', { class: 'panel redteam-card', id: 'redteam', 'aria-label': 'Red team results' })
+  const fill = data => {
+    if (!data?.summary) { card.remove(); return }
+    const s = data.summary
+    const chats = s.attacks - s.impersonations
+    const stat = (label, value, tone = '') => el('div', { class: `sec-stat ${tone}` }, el('span', {}, label), el('strong', {}, value))
+    card.replaceChildren(
+      el('div', { class: 'redteam-head' },
+        el('div', {}, el('p', { class: 'eyebrow' }, 'Automated red team'), el('h2', {}, 'We attacked our own agents'),
+          el('p', { class: 'panel-subtitle' }, `${s.attacks} attacks on ${s.games} live test games: prompt injections, social engineering and fake spy reports. Separate from this game.`)),
+        el('a', { class: 'redteam-link', href: prefix + '/redteam' }, 'Open full report')),
+      el('div', { class: 'sec-stats' },
+        stat('Attacks', String(s.attacks)),
+        stat('Leaks', `${s.roleOrPromptLeaks} of ${chats}`, s.roleOrPromptLeaks ? 'high' : 'ok'),
+        stat('Fakes blocked', `${s.impersonationsBlocked} of ${s.impersonations}`, s.impersonationsBlocked === s.impersonations ? 'ok' : 'high'),
+        stat('Relay messages', String(s.relayMessagesAudited))))
+  }
+  if (redTeamData !== undefined) fill(redTeamData)
+  else fetch(API + '/api/redteam').then(r => (r.ok ? r.json() : null)).catch(() => null).then(d => { redTeamData = d; fill(d) })
+  return card
+}
+
 // Postmortem: every security-relevant event of the game, labelled like an incident report.
 // The spy is a compromised agent, the witch an outside party, gossip is agent-to-agent traffic.
 function securityPanel(model) {
@@ -335,7 +360,7 @@ function render(model) {
   }
   populateMessages()
   const footer = el('div', { class: 'footer' }, el('span', {}, el('i', { class: 'footer-dot' }), 'Agent Relay carries the whispers. Terse keeps the record.'), el('span', {}, model.pub.sessionId))
-  const dashboard = el('div', { class: 'dashboard', id: 'overview' }, metricGrid(model), privacy, securityPanel(model), flow, el('div', { class: 'lower-grid' }, messagesPanel, cluesPanel, timelinePanel), footer)
+  const dashboard = el('div', { class: 'dashboard', id: 'overview' }, metricGrid(model), privacy, redTeamCard(), securityPanel(model), flow, el('div', { class: 'lower-grid' }, messagesPanel, cluesPanel, timelinePanel), footer)
   root.replaceChildren(dashboard)
   void leaderboardPanel().then(panel => { if (panel && dashboard.isConnected) dashboard.insertBefore(panel.cloneNode(true), footer) })
   if (selectedClue && !clueNodes.has(selectedClue)) selectedClue = null

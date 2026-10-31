@@ -15,7 +15,7 @@ import { MONSTER_IDS, MONSTER_NAMES, isMonsterId, type MonsterId, type RelayMeta
 
 const PORT = Number(process.env.PORT ?? 3001)
 const GAME_MS = Number(process.env.GAME_SECONDS ?? 180) * 1000
-const REVEAL_MS = Number(process.env.REVEAL_SECONDS ?? 60) * 1000
+const REVEAL_MS = Number(process.env.REVEAL_SECONDS ?? 30) * 1000
 const MAX_MESSAGE_CHARS = 300
 const MAX_AUDIO_BYTES = 2_000_000
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN ?? "*"
@@ -71,8 +71,9 @@ async function requireGame(sessionId: string) {
 // ----- handlers --------------------------------------------------------------
 
 async function startGame(req: Request) {
-    const input = await body<{ gameSeconds?: number; revealSeconds?: number }>(req).catch(() => ({}) as { gameSeconds?: number; revealSeconds?: number })
-    const sessionId = `game_${crypto.randomUUID().slice(0, 8)}`
+    const input = await body<{ gameSeconds?: number; revealSeconds?: number; redteam?: boolean }>(req).catch(() => ({}) as { gameSeconds?: number; revealSeconds?: number; redteam?: boolean })
+    // Automated red-team runs get their own prefix so they never count on the public leaderboard.
+    const sessionId = `${input.redteam ? "rt" : "game"}_${crypto.randomUUID().slice(0, 8)}`
     const gameMs = input.gameSeconds ? Math.min(Math.max(input.gameSeconds, 30), 900) * 1000 : GAME_MS
     const revealMs = input.revealSeconds ? Math.min(Math.max(input.revealSeconds, 10), 300) * 1000 : REVEAL_MS
     const state = await game(sessionId).start({ gameMs, revealMs })
@@ -358,6 +359,8 @@ async function qrCode(req: Request) {
 }
 
 const DIRECTOR_PAGE = fileURLToPath(new URL("../public/director.html", import.meta.url))
+const REDTEAM_PAGE = fileURLToPath(new URL("../public/redteam.html", import.meta.url))
+const REDTEAM_RESULTS = fileURLToPath(new URL("../redteam-results.json", import.meta.url))
 const DIRECTOR_ASSETS: Record<string, { path: string; type: string }> = Object.fromEntries([
     ["director.css", "text/css; charset=utf-8"],
     ["director.js", "text/javascript; charset=utf-8"],
@@ -370,6 +373,12 @@ const DIRECTOR_ASSETS: Record<string, { path: string; type: string }> = Object.f
 const routes: [string, RegExp, (req: Request, m: RegExpMatchArray) => Promise<Response>][] = [
     ["GET", /^\/health$/, async () => json({ ok: true, relayWorkspace: relayConfig.workspaceName, relay: relayConfig.baseUrl ? "local" : "hosted" })],
     ["GET", /^\/director\/?$/, async () => new Response(Bun.file(DIRECTOR_PAGE), { headers: { "content-type": "text/html; charset=utf-8" } })],
+    // Automated red-team report: the page, and the results of the last run (src/redteam.ts).
+    ["GET", /^\/redteam\/?$/, async () => new Response(Bun.file(REDTEAM_PAGE), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } })],
+    ["GET", /^\/api\/redteam$/, async () => {
+        const file = Bun.file(REDTEAM_RESULTS)
+        return (await file.exists()) ? json(await file.json()) : json({ error: "no_red_team_run" }, 404)
+    }],
     ["GET", /^\/(director\.(?:css|js)|director-model\.mjs)$/, async (_req, match) => {
         const asset = DIRECTOR_ASSETS[match[1]!]!
         return new Response(Bun.file(asset.path), { headers: { "content-type": asset.type, "cache-control": "no-cache" } })

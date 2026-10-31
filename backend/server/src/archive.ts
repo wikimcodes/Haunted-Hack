@@ -22,7 +22,7 @@ async function rest(path: string, init: RequestInit = {}): Promise<Response> {
 
 /** Writes one finished game. Idempotent (upsert on session_id), so retries and repeats are safe. */
 export async function archiveGame(sessionId: string, relayMode: "hosted" | "local"): Promise<boolean> {
-    if (!archiveEnabled || archived.has(sessionId)) return false
+    if (!archiveEnabled || archived.has(sessionId) || sessionId.startsWith("rt_")) return false
     const view = await actors.GameActor.get(sessionId).director()
     if (!view || view.public.phase === "playing") return false
     const pub = view.public
@@ -82,12 +82,34 @@ export interface Leaderboard {
     recent: { session_id: string; outcome: string; spy: string; accused: string | null; duration_seconds: number; ended_at: string }[]
 }
 
+/**
+ * Only games where the player actually talked to a ghost count. A game ended with no conversation
+ * (an abandoned tab, an automated test) is a guess, not a catch, so it would distort every stat.
+ */
 export async function leaderboard(): Promise<Leaderboard | null> {
     if (!archiveEnabled) return null
-    const [totals, monsters, recent] = await Promise.all([
-        rest("game_totals?select=*").then(r => r.json() as Promise<Leaderboard["totals"][]>),
-        rest("monster_stats?select=*&order=got_away_pct.desc.nullslast").then(r => r.json() as Promise<Leaderboard["monsters"]>),
-        rest("games?select=session_id,outcome,spy,accused,duration_seconds,ended_at&order=ended_at.desc&limit=8").then(r => r.json() as Promise<Leaderboard["recent"]>)
-    ])
-    return { totals: totals[0] ?? null, monsters, recent }
+    const rows = (await rest("games?select=session_id,outcome,spy,accused,duration_seconds,ended_at,whispers,fake_reports_blocked&player_messages=gte.1&order=ended_at.desc&limit=5000").then(r => r.json())) as {
+        session_id: string; outcome: string; spy: string; accused: string | null; duration_seconds: number; ended_at: string; whispers: number; fake_reports_blocked: number
+    }[]
+    const won = rows.filter(r => r.outcome === "won")
+    const pct = (n: number, d: number) => (d ? Math.round((100 * n) / d) : null)
+    const totals = {
+        games: rows.length,
+        players_escaped: won.length,
+        escape_rate_pct: pct(won.length, rows.length),
+        fastest_catch_seconds: won.length ? Math.min(...won.map(r => r.duration_seconds)) : null,
+        total_whispers: rows.reduce((n, r) => n + (r.whispers ?? 0), 0),
+        total_fakes_blocked: rows.reduce((n, r) => n + (r.fake_reports_blocked ?? 0), 0)
+    }
+    const bySpy = new Map<string, { times_spy: number; times_got_away: number }>()
+    for (const r of rows) {
+        const m = bySpy.get(r.spy) ?? { times_spy: 0, times_got_away: 0 }
+        m.times_spy += 1
+        if (r.outcome !== "won") m.times_got_away += 1
+        bySpy.set(r.spy, m)
+    }
+    const monsters = [...bySpy].map(([monster, m]) => ({ monster, ...m, got_away_pct: pct(m.times_got_away, m.times_spy) }))
+        .sort((a, b) => (b.got_away_pct ?? -1) - (a.got_away_pct ?? -1))
+    const recent = rows.slice(0, 8).map(({ session_id, outcome, spy, accused, duration_seconds, ended_at }) => ({ session_id, outcome, spy, accused, duration_seconds, ended_at }))
+    return { totals, monsters, recent }
 }
