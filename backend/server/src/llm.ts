@@ -107,21 +107,54 @@ export async function monsterReply(ctx: MonsterContext): Promise<MonsterReply> {
 }
 
 // ----- the witch's voice -------------------------------------------------------
+// ElevenLabs when ELEVENLABS_API_KEY is set (much more characterful), otherwise OpenAI TTS.
 
+const ELEVEN_KEY = process.env.ELEVENLABS_API_KEY
+const ELEVEN_VOICE = process.env.ELEVENLABS_VOICE_ID ?? ""
+const ELEVEN_MODEL = process.env.ELEVENLABS_MODEL ?? "eleven_multilingual_v2"
 const TTS_MODEL = process.env.WITCH_TTS_MODEL ?? "gpt-4o-mini-tts"
 const WITCH_VOICE = process.env.WITCH_VOICE ?? "fable"
 const WITCH_STYLE =
     "You are an old, theatrical Halloween witch. Speak slowly with a raspy, sly, sinister-but-playful tone and a little cackle at the start. Savour the words."
 
-/** Speaks one witch line with OpenAI text-to-speech. Returns MP3 bytes, or null if unavailable. */
+export const voiceProvider = ELEVEN_KEY && ELEVEN_VOICE ? "elevenlabs" : client ? "openai" : "none"
+
+async function elevenLabsSpeech(text: string): Promise<ArrayBuffer> {
+    const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(ELEVEN_VOICE)}?output_format=mp3_44100_128`, {
+        method: "POST",
+        headers: { "xi-api-key": ELEVEN_KEY!, "content-type": "application/json", accept: "audio/mpeg" },
+        body: JSON.stringify({
+            text,
+            model_id: ELEVEN_MODEL,
+            // Low stability + high style = a more theatrical, wobbly delivery.
+            voice_settings: { stability: 0.3, similarity_boost: 0.8, style: 0.7, use_speaker_boost: true }
+        }),
+        signal: AbortSignal.timeout(15_000)
+    })
+    if (!res.ok) throw new Error(`elevenlabs ${res.status}: ${(await res.text()).slice(0, 160)}`)
+    return res.arrayBuffer()
+}
+
+async function openAiSpeech(text: string): Promise<ArrayBuffer> {
+    const res = await client!.audio.speech.create({ model: TTS_MODEL, voice: WITCH_VOICE, input: text, instructions: WITCH_STYLE, response_format: "mp3" })
+    return res.arrayBuffer()
+}
+
+/** Speaks one witch line. Returns MP3 bytes, or null if no voice service is available. */
 export async function witchSpeech(text: string): Promise<ArrayBuffer | null> {
+    const line = text.slice(0, 400)
+    if (voiceProvider === "elevenlabs") {
+        try {
+            return await elevenLabsSpeech(line)
+        } catch (err) {
+            console.error("[voice] ElevenLabs failed, trying OpenAI:", String(err).slice(0, 160))
+        }
+    }
     if (!client) return null
     try {
-        const res = await client.audio.speech.create({ model: TTS_MODEL, voice: WITCH_VOICE, input: text.slice(0, 400), instructions: WITCH_STYLE, response_format: "mp3" })
-        return await res.arrayBuffer()
+        return await openAiSpeech(line)
     } catch (err) {
         console.error("[voice] failed:", String(err).slice(0, 160))
         return null
     }
 }
-
