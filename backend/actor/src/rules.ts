@@ -17,6 +17,7 @@ export const DEFAULT_REVEAL_MS = 60_000
 export const GOSSIP_PER_ROUND = 1
 export const MAX_FACT_CHARS = 140
 export const MAX_GOSSIP_CHARS = 280
+export const MAX_FACTS_PER_GAME = 120
 
 export function isMonsterId(value: unknown): value is MonsterId {
     return typeof value === "string" && (MONSTER_IDS as readonly string[]).includes(value)

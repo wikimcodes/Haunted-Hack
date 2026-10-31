@@ -9,6 +9,7 @@ import {
     GOSSIP_PER_ROUND,
     LOSE_LINE,
     MAX_FACT_CHARS,
+    MAX_FACTS_PER_GAME,
     MAX_GOSSIP_CHARS,
     MONSTERS,
     MONSTER_IDS,
@@ -312,6 +313,8 @@ export class GameActor extends Actor<SocketMeta, Incoming, Cue> {
         const state = this.#requireState()
         if (!isMonsterId(monsterId)) throw new Error("unknown_monster")
         if (!this.#isLive(state)) throw new Error("game_over")
+        // Each saved list is rewritten whole on change, so keep a game's lists small.
+        if (this.facts.length >= MAX_FACTS_PER_GAME) throw new Error("too_many_messages")
         const fact: Fact = { id: `f${this.facts.length + 1}`, text: clip(text, MAX_FACT_CHARS), toldTo: monsterId, createdAt: Date.now() }
         this.facts = [...this.facts, fact]
         this.knowledge = { ...this.knowledge, [monsterId]: [...(this.knowledge[monsterId] ?? []), fact.id] }
@@ -381,6 +384,7 @@ export class GameActor extends Actor<SocketMeta, Incoming, Cue> {
 
     /** Step 2: the sender confirms the Relay message it actually sent. */
     async confirmGossip(gossipId: string, relayMessageId: string, text: string): Promise<void> {
+        this.#requireState()
         // The receiver may have processed the DM first; keep its status but still record what was sent.
         this.gossip = this.gossip.map(g =>
             g.id === gossipId
@@ -393,6 +397,7 @@ export class GameActor extends Actor<SocketMeta, Incoming, Cue> {
 
     /** The sender could not deliver the message: free the reservation so it does not burn the round's quota. */
     async releaseGossip(gossipId: string): Promise<void> {
+        this.#requireState()
         const before = this.gossip.length
         this.gossip = this.gossip.filter(g => !(g.id === gossipId && g.status === "reserved"))
         if (this.gossip.length !== before) this.#log("GOSSIP_RELEASED", { gossipId })
@@ -403,6 +408,7 @@ export class GameActor extends Actor<SocketMeta, Incoming, Cue> {
      * and must match the reservation, otherwise the facts are not learned.
      */
     async receiveGossip(gossipId: string, relayFrom: string, to: string, relayMessageId: string): Promise<{ ok: boolean; facts: Fact[] }> {
+        this.#requireState()
         const g = this.gossip.find(x => x.id === gossipId)
         if (!g || g.from !== relayFrom || g.to !== to || (g.relayMessageId && g.relayMessageId !== relayMessageId)) {
             this.#log("GOSSIP_REJECTED", { gossipId, relayFrom, to })
@@ -444,6 +450,7 @@ export class GameActor extends Actor<SocketMeta, Incoming, Cue> {
 
     /** The server records the Relay message it used to hand a fact to a monster's agent. */
     async recordHandoff(relayMessageId: string): Promise<void> {
+        this.#requireState()
         if (!this.handoffIds.includes(relayMessageId)) this.handoffIds = [...this.handoffIds, relayMessageId]
     }
 
@@ -484,6 +491,10 @@ export class GameActor extends Actor<SocketMeta, Incoming, Cue> {
     // ----- sockets ---------------------------------------------------------
 
     async onConnect(socket: Socket): Promise<void> {
+        if (!this.publicState) {
+            socket.reject(4004, "game_not_found")
+            return
+        }
         socket.setTags(socket.metadata.role)
         this.setWebSocketAutoResponse({ request: "ping", response: "pong" })
     }

@@ -316,7 +316,8 @@ Bun.serve<RelaySocketData>({
                 } catch (err) {
                     if (err instanceof HttpError) return json({ error: err.message }, err.status)
                     const message = String((err as Error)?.message ?? err)
-                    if (/game_over|game_not_started|unknown_monster/.test(message)) return json({ error: message.match(/game_over|game_not_started|unknown_monster/)![0] }, 409)
+                    const known = message.match(/game_over|game_not_started|unknown_monster|too_many_messages/)
+                    if (known) return json({ error: known[0] }, 409)
                     console.error(`[${method} ${pathname}]`, err)
                     return json({ error: "internal_error" }, 500)
                 }
