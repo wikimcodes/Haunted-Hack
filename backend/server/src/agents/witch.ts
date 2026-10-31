@@ -2,6 +2,7 @@
 // Every DM it receives is handed to GameActor with the Relay-authenticated sender;
 // the actor decides whether that sender is really the spy.
 
+import "../clock"
 import { actors } from "../../generated/index.js"
 import { connectAgent, pollInbox, withRelayRetry } from "../relayConfig"
 import type { RelayMeta } from "../types"

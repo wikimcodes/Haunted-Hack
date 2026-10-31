@@ -1,6 +1,7 @@
 // Game API server. Players talk to this over HTTP; live state comes from the Terse WebSocket.
 // The server never holds game state itself: GameActor and MonsterActor are the source of truth.
 
+import "./clock"
 import { normalize, resolve, sep } from "node:path"
 import { fileURLToPath } from "node:url"
 

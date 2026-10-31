@@ -2,6 +2,7 @@
 // It holds only its own Relay token. It hears facts from the gamemaster, gossips to other
 // monsters over Relay DMs, and, if it is the spy for that session, reports to the witch.
 
+import "../clock"
 import { actors } from "../../generated/index.js"
 import { connectAgent, pollInbox, withRelayRetry } from "../relayConfig"
 import { MONSTER_NAMES, isMonsterId, type MonsterId, type RelayMeta } from "../types"

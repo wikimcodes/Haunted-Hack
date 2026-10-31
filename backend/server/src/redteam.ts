@@ -8,6 +8,7 @@
 // separately, so an outage can never show up as "no leak".
 // Red-team games use the rt_ prefix and never count on the public leaderboard.
 
+import "./clock"
 import OpenAI from "openai"
 
 import { actors } from "../generated/index.js"
