@@ -80,13 +80,24 @@ if (deployed) {
 // Local mode must not inherit the deployed settings from server/.env.
 const childEnv = deployed ? process.env : { ...process.env, TERSE_ACTOR_URL: "", TERSE_API_KEY: "" }
 
+// Build the website so the game server can serve it from the same address as the API
+// (one public link + QR code for everything). Skipped if the frontend isn't installed.
+const WEB_DIR = here("../frontend-game")
+if (await Bun.file(`${WEB_DIR}/node_modules/.bin/vite`).exists()) {
+    console.log("Building the website...")
+    const build = Bun.spawnSync(["npx", "vite", "build"], { cwd: WEB_DIR, env: { ...process.env, VITE_API_URL: "/" }, stdout: "ignore", stderr: "pipe" })
+    if (build.exitCode !== 0) console.log("Website build failed (API still works):", build.stderr.toString().slice(-400))
+} else {
+    console.log("Website not built: run `bun install` in frontend-game to serve it from this server.")
+}
+
 run("server", ["bun", "src/index.ts"], SERVER_DIR, childEnv)
 await waitFor("http://localhost:3001/health", "Game server")
 run("agents", ["bun", "src/agents/runAll.ts"], SERVER_DIR, childEnv)
 
 console.log(`
   Spy Monster backend is up ${deployed ? `(actors on Terse cloud: ${deployedUrl})` : "(local Terse)"}, ${relayLocal ? "local Relay engine" : "hosted Agent Relay"}
-  API            http://localhost:3001
-  Director View  http://localhost:3001/director
+  Game website   http://localhost:3001
+  Director View  http://localhost:3001/director   ("Scan to play" shows a QR code via a public link)
   Ctrl+C to stop everything.
 `)

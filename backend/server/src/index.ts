@@ -1,7 +1,10 @@
 // Game API server. Players talk to this over HTTP; live state comes from the Terse WebSocket.
 // The server never holds game state itself: GameActor and MonsterActor are the source of truth.
 
+import { normalize, resolve, sep } from "node:path"
 import { fileURLToPath } from "node:url"
+
+import QRCode from "qrcode"
 
 import { actors } from "../generated/index.js"
 import { archiveGame, leaderboard, startArchiver } from "./archive"
@@ -288,6 +291,35 @@ function publicSocketUrl(req: Request, websocketUrl: string): string {
 
 type RelaySocketData = { to: string; upstream?: WebSocket; queue: (string | Buffer)[] }
 
+// ----- the website and its QR code ----------------------------------------------
+// The built frontend (frontend-game/dist, built with VITE_API_URL=/) is served from this same
+// origin, so one public link covers the game and the API, and a QR code can point at it.
+
+const WEB_DIST = fileURLToPath(new URL("../../../frontend-game/dist/", import.meta.url))
+
+async function serveWeb(pathname: string): Promise<Response | null> {
+    const index = Bun.file(resolve(WEB_DIST, "index.html"))
+    if (!(await index.exists())) return null
+    const target = resolve(WEB_DIST, "." + normalize(decodeURIComponent(pathname)))
+    if (target.startsWith(WEB_DIST.replace(/\/$/, "") + sep) || target === WEB_DIST.replace(/\/$/, "")) {
+        const file = Bun.file(target)
+        if (pathname !== "/" && (await file.exists())) {
+            const cache = pathname.startsWith("/assets/") ? "public, max-age=3600" : "no-cache"
+            return new Response(file, { headers: { "cache-control": cache } })
+        }
+    }
+    // Single-page app: unknown paths (e.g. /?game=…) get the app shell.
+    return new Response(index, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } })
+}
+
+/** PNG QR code for a link to this game (the Director screen passes its own public origin). */
+async function qrCode(req: Request) {
+    const url = new URL(req.url).searchParams.get("url") ?? ""
+    if (!/^https?:\/\/[^\s]{3,200}$/.test(url)) throw new HttpError(400, "bad_url")
+    const png = await QRCode.toBuffer(url, { width: 512, margin: 2, color: { dark: "#101525", light: "#ffffff" } })
+    return new Response(new Uint8Array(png), { headers: { "content-type": "image/png", "cache-control": "no-store" } })
+}
+
 const DIRECTOR_PAGE = fileURLToPath(new URL("../public/director.html", import.meta.url))
 
 // ----- router ----------------------------------------------------------------
@@ -296,6 +328,7 @@ const routes: [string, RegExp, (req: Request, m: RegExpMatchArray) => Promise<Re
     ["GET", /^\/health$/, async () => json({ ok: true, relayWorkspace: relayConfig.workspaceName, relay: relayConfig.baseUrl ? "local" : "hosted" })],
     ["GET", /^\/director\/?$/, async () => new Response(Bun.file(DIRECTOR_PAGE), { headers: { "content-type": "text/html; charset=utf-8" } })],
     ["GET", /^\/api\/games\/recent$/, () => recentGames()],
+    ["GET", /^\/api\/qr$/, req => qrCode(req)],
     ["GET", /^\/api\/leaderboard$/, async () => json((await leaderboard()) ?? { disabled: true })],
     ["POST", /^\/api\/game\/start$/, req => startGame(req)],
     ["GET", /^\/api\/game\/([\w-]+)$/, async (_req, m) => json(await requireGame(m[1]!))],
@@ -350,6 +383,10 @@ Bun.serve<RelaySocketData>({
                     return json({ error: "internal_error" }, 500)
                 }
             }
+        }
+        if ((req.method === "GET" || req.method === "HEAD") && !pathname.startsWith("/api/")) {
+            const page = await serveWeb(pathname)
+            if (page) return page
         }
         return json({ error: "not_found" }, 404)
     }

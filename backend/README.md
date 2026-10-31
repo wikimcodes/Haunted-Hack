@@ -98,6 +98,16 @@ Setup: create a Supabase project, run `backend/supabase/schema.sql` in the SQL E
 
 To clear test games before judging: `truncate public.games;` in the SQL Editor.
 
+## One link + QR code for everyone
+
+The game server also serves the built website (`frontend-game/dist`, built by `demo.ts` with `VITE_API_URL=/`), so the game and the API share one address. To let anyone play from their phone:
+
+1. Start everything: `cd backend && RELAY=local bun demo.ts`
+2. In another terminal, open a public link to it: `cloudflared tunnel --url http://localhost:3001` (it prints `https://…trycloudflare.com`)
+3. On the big screen, open `<that link>/director` and click **Scan to play**. The QR code points at the public link; people scan it and play in their browser.
+
+The tunnel stays up only while that command runs. Close it with Ctrl+C after the demo.
+
 ## Phones on the same wifi
 
 Point the frontend's `apiUrl` at the laptop's address (`ipconfig getifaddr en0`, e.g. `http://172.17.19.187:3001`). With local actors, socket grants then go through `/terse-ws` on the game server, which relays to the local Terse runtime (it only listens on 127.0.0.1). Venue wifi that isolates devices will block this; deploy instead.

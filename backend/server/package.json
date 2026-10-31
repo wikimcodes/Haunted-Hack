@@ -2,7 +2,9 @@
   "name": "spy-monster-server",
   "private": true,
   "type": "module",
-  "engines": { "bun": ">=1.4.2" },
+  "engines": {
+    "bun": ">=1.4.2"
+  },
   "scripts": {
     "generate": "terse actor generate",
     "setup:relay": "bun src/setupRelay.ts",
@@ -13,10 +15,12 @@
   "dependencies": {
     "@agent-relay/sdk": "latest",
     "openai": "latest",
+    "qrcode": "1.5.4",
     "zod": "^4.1.0"
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "@types/qrcode": "^1.5.6",
     "typescript": "~5.9.3"
   }
 }
