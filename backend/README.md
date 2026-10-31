@@ -15,7 +15,9 @@ server/   Game API (Bun), OpenAI calls, and the Relay agent processes (sprout, p
 cd backend && bun demo.ts
 ```
 
-It starts Terse, the game server and the four agents, creates a Relay workspace if there isn't one, and stops everything on Ctrl+C.
+Keys: run `zsh backend/set-keys.sh` once. It asks for the OpenAI and Terse API keys with hidden input and writes `server/.env`. With a Terse key set, `demo.ts` uses the deployed cloud actors (`LOCAL=1 bun demo.ts` forces local).
+
+It starts the game server and the four agents (plus local Terse when not deployed), creates a Relay workspace if there isn't one, and stops everything on Ctrl+C.
 
 **Or by hand (3 terminals):**
 

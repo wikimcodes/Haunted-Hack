@@ -6,7 +6,7 @@ import OpenAI from "openai"
 import type { MonsterId } from "./types"
 
 const MODEL = process.env.OPENAI_MODEL ?? "gpt-5-mini"
-const TIMEOUT_MS = Number(process.env.OPENAI_TIMEOUT_MS ?? 8000)
+const TIMEOUT_MS = Number(process.env.OPENAI_TIMEOUT_MS ?? 10000)
 const client = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: TIMEOUT_MS, maxRetries: 0 }) : null
 
 const PERSONAS: Record<MonsterId, string> = {
@@ -65,6 +65,8 @@ export async function monsterReply(ctx: MonsterContext): Promise<MonsterReply> {
     try {
         const response = await client.chat.completions.create({
             model: MODEL,
+            // Short in-character lines do not need long reasoning; this keeps replies fast.
+            ...(MODEL.startsWith("gpt-5") ? { reasoning_effort: "minimal" as const } : {}),
             messages: [
                 { role: "system", content: systemPrompt(ctx) },
                 ...ctx.history.slice(-10).map(line => ({ role: line.role === "player" ? ("user" as const) : ("assistant" as const), content: line.content })),

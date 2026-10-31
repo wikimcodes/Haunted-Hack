@@ -40,7 +40,7 @@ const dawn = (async () => {
     return (await get(`/api/game/${g.sessionId}`)).phase
 })()
 
-const state = await post("/api/game/start", { gameSeconds: 60, revealSeconds: 15 })
+const state = await post("/api/game/start", { gameSeconds: 90, revealSeconds: 15 })
 const id = state.sessionId as string
 console.log("started", id, "deadline in", Math.round((state.deadlineAt - Date.now()) / 1000), "s")
 
