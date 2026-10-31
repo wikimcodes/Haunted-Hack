@@ -11,7 +11,7 @@ export class GameApiError extends Error {
     }
 }
 
-export function createGameApi(baseUrl: string) {
+export function createGameApi(baseUrl: string, onServerTime?: (offsetMs: number) => void) {
     const base = baseUrl.replace(/\/$/, "")
 
     async function request<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
@@ -20,6 +20,10 @@ export function createGameApi(baseUrl: string) {
             headers: body === undefined ? undefined : { "content-type": "application/json" },
             body: body === undefined ? undefined : JSON.stringify(body)
         })
+        // Server clock minus this device's clock. The server stamps the time as it sends the response,
+        // so compare with when it arrived (network delay is small next to a wrong phone clock).
+        const serverTime = Number(res.headers.get("x-server-time"))
+        if (onServerTime && serverTime > 0) onServerTime(serverTime - Date.now())
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new GameApiError(res.status, (data as { error?: string }).error ?? "request_failed")
         return data as T

@@ -27,12 +27,13 @@ export function useSpyMonster({ apiUrl, autoResume = true }: UseSpyMonsterOption
     }, [connection, autoResume])
 
     const state = snapshot.state
+    const serverNow = now + snapshot.clockOffsetMs
     return {
         ...snapshot,
         /** Whole seconds until dawn, from the server's deadline. */
-        secondsLeft: state ? Math.max(0, Math.ceil((state.deadlineAt - now) / 1000)) : null,
+        secondsLeft: state ? Math.max(0, Math.ceil((state.deadlineAt - serverNow) / 1000)) : null,
         /** Whole seconds until the witch's next reveal, or null if none is left. */
-        secondsToReveal: state?.nextRevealAt ? Math.max(0, Math.ceil((state.nextRevealAt - now) / 1000)) : null,
+        secondsToReveal: state?.nextRevealAt ? Math.max(0, Math.ceil((state.nextRevealAt - serverNow) / 1000)) : null,
         isOver: state ? state.phase !== "playing" : false,
         start: (options?: { gameSeconds?: number; revealSeconds?: number }) => connection.start(options),
         chat: (monsterId: MonsterId, message: string) => connection.chat(monsterId, message),

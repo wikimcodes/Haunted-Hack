@@ -56,18 +56,22 @@ export async function withRelayRetry<T>(label: string, fn: () => Promise<T>, att
 export function pollInbox(
     agent: { inbox: { get(options?: { limit?: number }): Promise<{ unreadDms?: { lastMessage?: { id?: string } }[] }> } },
     handle: (messageId: string) => void,
-    intervalMs = 1500
+    intervalMs = 3000
 ): () => void {
     let stopped = false
+    let wait = intervalMs
     const tick = async () => {
         while (!stopped) {
             try {
                 const inbox = await agent.inbox.get()
                 for (const dm of inbox.unreadDms ?? []) if (dm.lastMessage?.id) handle(dm.lastMessage.id)
+                wait = intervalMs
             } catch (err) {
-                console.warn("[relay] inbox poll failed:", String(err))
+                // Relay is busy or overloaded: back off instead of adding to its load.
+                wait = Math.min(wait * 2, 20_000)
+                console.warn(`[relay] inbox poll failed, next try in ${wait / 1000}s:`, String(err).slice(0, 120))
             }
-            await Bun.sleep(intervalMs)
+            await Bun.sleep(wait)
         }
     }
     void tick()

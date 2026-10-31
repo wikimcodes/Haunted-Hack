@@ -88,7 +88,7 @@ Point the frontend's `apiUrl` at the laptop's address (`ipconfig getifaddr en0`,
 
 ## Known limits
 
-- Relay's push delivery can lag by 10 to 30 seconds, so agents also poll their own inbox every 1.5s. Messages from before an agent started are ignored.
+- Relay's push delivery can lag by 10 to 30 seconds, so agents also poll their own inbox every 3s (backing off when Relay is busy). Messages from before an agent started are ignored. If hosted Relay is overloaded (HTTP 503 "database_overloaded", sends taking 10-30s), whispers and spy reports arrive late; clues then fall back to whisper counts and clearing an innocent.
 - Relay rate-limits bursts (HTTP 429 "workspace busy"). Every Relay call retries with backoff and an idempotency key, so nothing is duplicated. Several games at once can delay whispers by a few seconds.
 - If OpenAI fails or times out (8s), monsters fall back to scripted lines (`source: "fallback"`).
 - Duplicate-request memory is per server process.

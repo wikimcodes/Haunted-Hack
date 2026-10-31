@@ -37,8 +37,8 @@ function Game() {
 | Field | Meaning |
 |---|---|
 | `state` | `PublicGameState`: phase, monsters (with `mood`), clues, accusation, `spyId` (null until the end) |
-| `secondsLeft`, `secondsToReveal` | Countdowns from the server's deadline |
-| `chat`, `waitingFor`, `error` | Chat log, which monster is replying, last error |
+| `secondsLeft`, `secondsToReveal` | Countdowns from the server's deadline, corrected for the device's clock |
+| `chat`, `waiting`, `error` | Chat log, monsters still replying (several can reply at once), last error (`still_replying` if you message a busy monster) |
 | `connected` | Live socket is up (it reconnects by itself) |
 | `start()`, `chat(id, text)`, `accuse(id)` | Actions |
 | `useCue(handler)` | Animation triggers: `MONSTER_THINKING`, `MONSTER_SPEAKING`, `GOSSIP_STARTED`, `WITCH_REVEAL`, `ACCUSATION_CORRECT`, `ACCUSATION_WRONG`, `GAME_EXPIRED` |
