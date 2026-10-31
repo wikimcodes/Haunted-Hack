@@ -76,6 +76,10 @@ Open the `websocketUrl` from `/socket` right away (it expires). You receive:
 4. Whoever is the spy DMs the witch. The `witch` process passes Relay's sender to `GameActor.acceptReport`, which rejects anyone who is not the spy.
 5. The actor alarm fires every reveal interval (even with no one connected) and the witch echoes a report, clears an innocent, or counts whispers.
 
+## Phones on the same wifi
+
+Point the frontend's `apiUrl` at the laptop's address (`ipconfig getifaddr en0`, e.g. `http://172.17.19.187:3001`). With local actors, socket grants then go through `/terse-ws` on the game server, which relays to the local Terse runtime (it only listens on 127.0.0.1). Venue wifi that isolates devices will block this; deploy instead.
+
 ## Deploying
 
 `terse deploy` (from `actor/`, needs `terse auth login`) hosts the actors. Then set `TERSE_ACTOR_URL` and `TERSE_API_KEY` in `server/.env` and rerun `terse actor generate`. The server and agents can run on any host with Bun.

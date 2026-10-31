@@ -132,7 +132,7 @@ async function socket(req: Request, sessionId: string) {
         actorId: sessionId,
         metadata: { playerId: input.playerId ?? crypto.randomUUID(), role }
     })
-    return json(grant)
+    return json({ ...grant, websocketUrl: publicSocketUrl(req, grant.websocketUrl) })
 }
 
 async function director(sessionId: string) {
@@ -224,6 +224,26 @@ async function relayLive(req: Request, sessionId: string) {
     return json({ phase: state.phase, nextSince: Math.max(latestSeq, since), events: rows })
 }
 
+// ----- local Terse socket relay ------------------------------------------------
+// The local Terse runtime only listens on 127.0.0.1, so phones on the same wifi cannot reach it.
+// When actors run locally, socket grants point at /terse-ws on this server, which pipes the
+// connection to the local runtime. Only the Terse socket path is ever forwarded.
+// With deployed actors (TERSE_ACTOR_URL set) grants are already public and pass through untouched.
+
+const LOCAL_TERSE = "127.0.0.1:7100"
+
+function publicSocketUrl(req: Request, websocketUrl: string): string {
+    const upstream = new URL(websocketUrl)
+    if (!["127.0.0.1", "localhost"].includes(upstream.hostname)) return websocketUrl
+    const requestUrl = new URL(req.url)
+    const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? requestUrl.host
+    if (/^(localhost|127\.0\.0\.1)(:|$)/.test(host)) return websocketUrl
+    const secure = (req.headers.get("x-forwarded-proto") ?? requestUrl.protocol.replace(":", "")) === "https"
+    return `${secure ? "wss" : "ws"}://${host}/terse-ws?to=${encodeURIComponent(upstream.pathname + upstream.search)}`
+}
+
+type RelaySocketData = { to: string; upstream?: WebSocket; queue: (string | Buffer)[] }
+
 const DIRECTOR_PAGE = fileURLToPath(new URL("../public/director.html", import.meta.url))
 
 // ----- router ----------------------------------------------------------------
@@ -241,12 +261,35 @@ const routes: [string, RegExp, (req: Request, m: RegExpMatchArray) => Promise<Re
     ["GET", /^\/api\/game\/([\w-]+)\/relay-live$/, (req, m) => relayLive(req, m[1]!)]
 ]
 
-Bun.serve({
+Bun.serve<RelaySocketData>({
     port: PORT,
     idleTimeout: 30,
-    async fetch(req) {
+    websocket: {
+        open(ws) {
+            const upstream = new WebSocket(`ws://${LOCAL_TERSE}${ws.data.to}`)
+            ws.data.upstream = upstream
+            upstream.onopen = () => ws.data.queue.splice(0).forEach(m => upstream.send(m))
+            upstream.onmessage = event => ws.send(typeof event.data === "string" ? event.data : new Uint8Array(event.data as ArrayBuffer))
+            upstream.onclose = event => ws.close(event.code >= 3000 || event.code === 1000 ? event.code : 1011, event.reason)
+            upstream.onerror = () => ws.close(1011, "upstream_error")
+        },
+        message(ws, message) {
+            const upstream = ws.data.upstream
+            if (upstream?.readyState === WebSocket.OPEN) upstream.send(message)
+            else ws.data.queue.push(message)
+        },
+        close(ws) {
+            ws.data.upstream?.close()
+        }
+    },
+    async fetch(req, server) {
         if (req.method === "OPTIONS") return json(null, 204)
-        const { pathname } = new URL(req.url)
+        const { pathname, searchParams } = new URL(req.url)
+        if (pathname === "/terse-ws") {
+            const to = searchParams.get("to") ?? ""
+            if (!/^\/v1\/socket\?key=[\w.-]+$/.test(to)) return json({ error: "bad_socket_target" }, 400)
+            return server.upgrade(req, { data: { to, queue: [] } }) ? undefined : json({ error: "upgrade_failed" }, 400)
+        }
         for (const [method, pattern, handler] of routes) {
             const match = pathname.match(pattern)
             if (match && req.method === method) {
