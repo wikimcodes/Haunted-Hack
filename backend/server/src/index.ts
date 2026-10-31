@@ -15,7 +15,7 @@ import { MONSTER_IDS, MONSTER_NAMES, isMonsterId, type MonsterId, type RelayMeta
 
 const PORT = Number(process.env.PORT ?? 3001)
 const GAME_MS = Number(process.env.GAME_SECONDS ?? 180) * 1000
-const REVEAL_MS = Number(process.env.REVEAL_SECONDS ?? 60) * 1000
+const REVEAL_MS = Number(process.env.REVEAL_SECONDS ?? 30) * 1000
 const MAX_MESSAGE_CHARS = 300
 const MAX_AUDIO_BYTES = 2_000_000
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN ?? "*"
