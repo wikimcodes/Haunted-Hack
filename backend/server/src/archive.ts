@@ -22,7 +22,7 @@ async function rest(path: string, init: RequestInit = {}): Promise<Response> {
 
 /** Writes one finished game. Idempotent (upsert on session_id), so retries and repeats are safe. */
 export async function archiveGame(sessionId: string, relayMode: "hosted" | "local"): Promise<boolean> {
-    if (!archiveEnabled || archived.has(sessionId)) return false
+    if (!archiveEnabled || archived.has(sessionId) || sessionId.startsWith("rt_")) return false
     const view = await actors.GameActor.get(sessionId).director()
     if (!view || view.public.phase === "playing") return false
     const pub = view.public

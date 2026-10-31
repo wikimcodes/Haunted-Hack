@@ -71,8 +71,9 @@ async function requireGame(sessionId: string) {
 // ----- handlers --------------------------------------------------------------
 
 async function startGame(req: Request) {
-    const input = await body<{ gameSeconds?: number; revealSeconds?: number }>(req).catch(() => ({}) as { gameSeconds?: number; revealSeconds?: number })
-    const sessionId = `game_${crypto.randomUUID().slice(0, 8)}`
+    const input = await body<{ gameSeconds?: number; revealSeconds?: number; redteam?: boolean }>(req).catch(() => ({}) as { gameSeconds?: number; revealSeconds?: number; redteam?: boolean })
+    // Automated red-team runs get their own prefix so they never count on the public leaderboard.
+    const sessionId = `${input.redteam ? "rt" : "game"}_${crypto.randomUUID().slice(0, 8)}`
     const gameMs = input.gameSeconds ? Math.min(Math.max(input.gameSeconds, 30), 900) * 1000 : GAME_MS
     const revealMs = input.revealSeconds ? Math.min(Math.max(input.revealSeconds, 10), 300) * 1000 : REVEAL_MS
     const state = await game(sessionId).start({ gameMs, revealMs })
