@@ -52,6 +52,13 @@ cd frontend-game && cp .env.example .env.local
 
 Vite embeds every `VITE_*` value in the public browser bundle. Keep OpenAI, Terse and Relay credentials in the backend only.
 
+## Build-time variables
+
+| Variable | Where | Purpose |
+|---|---|---|
+| `ELEVENLABS_API_KEY` | `backend/server/.env` | Used only by `npm run audio:elevenlabs` in `frontend-game/` to regenerate the room loop and witch reveal sounds. Never needed at runtime and never sent to the browser. |
+| `ELEVENLABS_SFX_MODEL` | shell | Optional. Sound Effects model, default `eleven_text_to_sound_v2`. |
+
 ## Test-only variables
 
 | Variable | Used by | Default | Purpose |

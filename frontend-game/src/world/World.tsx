@@ -4,11 +4,12 @@ import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js"
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js"
 import { HDRLoader } from "three/addons/loaders/HDRLoader.js"
 import type { MonsterId, Mood } from "../types"
+import { LibraryAudio, type AudioStatus } from "../audio/LibraryAudio"
 import { EYE_HEIGHT, isWalkable, moveWithCollisions, OBSTACLES, SPAWN } from "./collision"
-import { CameraDirector, DEFAULT_PRESENTATION, candleModulation, lightProfile, poseLookingAt, type CameraPose, type PresentationManifest, type PresentationState } from "./cinematics"
+import { CameraDirector, DEFAULT_PRESENTATION, candleModulation, cinematicFrameDelta, lightProfile, poseLookingAt, revealLighting, type CameraPose, type PresentationManifest, type PresentationState } from "./cinematics"
 import "./world.css"
 
-export interface WorldHandle { lock(): void; unlock(): void; reset(): void }
+export interface WorldHandle { lock(): void; unlock(): void; reset(): void; unlockAudio(): Promise<boolean> }
 export interface WorldProps {
     active: boolean
     interactive: boolean
@@ -17,6 +18,8 @@ export interface WorldProps {
     presentation?: PresentationState
     focusMonster?: MonsterId | null
     revealToken?: number
+    soundMuted?: boolean
+    onAudioStatus?: (status: AudioStatus) => void
     /** True only while the short witch reveal owns the camera. Keep active=true to play it. */
     onCinematicChange?: (active: boolean) => void
     onProgress: (percent: number) => void
@@ -31,7 +34,7 @@ type Placement = { position: [number, number, number]; scale: [number, number, n
 type Manifest = { camera: { target: [number, number, number] }; assets: Record<string, { file: string; bytes: number; placement: Placement }> }
 type LightManifest = { lights: { name: string; type: string; position: [number, number, number]; blenderPowerWatts: number }[] }
 type Spirit = { root: THREE.Group; mixer: THREE.AnimationMixer; actions: Record<string, THREE.AnimationAction>; current: string }
-type Runtime = WorldHandle & { clearKeys(): void }
+type Runtime = WorldHandle & { clearKeys(): void; syncAudio(): void }
 
 const IDS: MonsterId[] = ["sprout", "pebble", "momo"]
 const BASE = `${import.meta.env.BASE_URL}assets/library/`
@@ -82,7 +85,8 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
     useImperativeHandle(ref, () => ({
         lock: () => runtime.current?.lock(),
         unlock: () => runtime.current?.unlock(),
-        reset: () => runtime.current?.reset()
+        reset: () => runtime.current?.reset(),
+        unlockAudio: () => runtime.current?.unlockAudio() ?? Promise.resolve(false)
     }), [])
 
     useEffect(() => {
@@ -90,7 +94,8 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
             runtime.current?.clearKeys()
             runtime.current?.unlock()
         }
-    }, [props.active, props.interactive])
+        runtime.current?.syncAudio()
+    }, [props.active, props.interactive, props.soundMuted])
 
     useEffect(() => {
         const host = hostRef.current
@@ -116,7 +121,7 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
         const abort = new AbortController()
         const scene = new THREE.Scene()
         scene.background = new THREE.Color("#111d22")
-        scene.fog = new THREE.FogExp2("#14252b", 0.025)
+        scene.fog = new THREE.FogExp2("#111d25", 0.027)
         const camera = new THREE.PerspectiveCamera(58, 1, 0.05, 85)
         camera.position.set(SPAWN.x, EYE_HEIGHT, SPAWN.z)
         const aim = new THREE.Vector3(-1.9, 2.39, -5.2)
@@ -133,7 +138,7 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, isCoarse ? 1.25 : 1.6))
         renderer.outputColorSpace = THREE.SRGBColorSpace
         renderer.toneMapping = THREE.AgXToneMapping
-        renderer.toneMappingExposure = 1.1
+        renderer.toneMappingExposure = 1.04
         renderer.shadowMap.enabled = true
         renderer.shadowMap.type = THREE.PCFShadowMap
         const canvas = renderer.domElement
@@ -141,12 +146,19 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
         canvas.setAttribute("aria-label", "Haunted library. Drag to look, use W A S D to walk, and E to speak to a nearby ghost.")
         canvas.dataset.testid = "library-canvas"
         host.appendChild(canvas)
+        const audio = new LibraryAudio({ baseUrl: `${import.meta.env.BASE_URL}audio/`, onStatus: status => { if (!disposed) latest.current.onAudioStatus?.(status) } })
+        latest.current.onAudioStatus?.("locked")
+        audio.setHidden(document.hidden)
+        const audioForward = new THREE.Vector3(), audioRight = new THREE.Vector3(), audioWindow = new THREE.Vector3()
 
         const spirits = new Map<MonsterId, Spirit>()
         let door: Spirit | null = null
         let witch: Spirit | null = null
         const witchMaterials: { material: THREE.MeshStandardMaterial; opacity: number; emission: number; eyes: boolean }[] = []
         const candleMaterials = new Map<THREE.MeshStandardMaterial, number>()
+        const spiritMaterials = new Map<THREE.MeshPhysicalMaterial, { color: THREE.Color; sheen: THREE.Color | null }>()
+        const windowMaterials = new Map<THREE.MeshStandardMaterial, { emission: THREE.Color; intensity: number }>()
+        const windowViolet = new THREE.Color("#734ba9")
         let hdri: THREE.DataTexture | null = null
         let environment: THREE.WebGLRenderTarget | null = null
         const pmrem = new THREE.PMREMGenerator(renderer)
@@ -160,9 +172,9 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
         const movingDirection = new THREE.Vector3()
         const flickerLights: { light: THREE.PointLight; base: number; phase: number }[] = []
 
-        const hemisphere = new THREE.HemisphereLight("#8ebac9", "#38291b", 0.28)
+        const hemisphere = new THREE.HemisphereLight("#8ebac9", "#38291b", 0.11)
         scene.add(hemisphere)
-        const moon = new THREE.DirectionalLight("#addfea", 2.4)
+        const moon = new THREE.DirectionalLight("#addfea", 2.1)
         moon.position.set(1.2, 6, -7.2)
         moon.target.position.set(-1.3, 0.5, 2)
         moon.castShadow = true
@@ -176,16 +188,22 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
         moon.shadow.normalBias = 0.035
         moon.shadow.bias = -0.00015
         scene.add(moon, moon.target)
-        const ghostFill = new THREE.PointLight("#a5d8e0", 10, 8, 2)
+        const ghostFill = new THREE.PointLight("#a5d8e0", 4.2, 8, 2)
         ghostFill.position.set(-0.1, 3.8, -1.1)
         scene.add(ghostFill)
-        const windowPulse = new THREE.PointLight("#aa83cc", 0, 7, 2)
+        const windowPulse = new THREE.SpotLight("#987bc2", 0, 6, .52, .75, 2)
         windowPulse.position.fromArray(presentationConfig.lights.window)
-        const witchRim = new THREE.PointLight("#b9afc8", .12, 3.5, 2)
+        const witchRim = new THREE.SpotLight("#b995e1", .08, 4, .68, .75, 2)
         witchRim.position.fromArray(presentationConfig.lights.witch)
+        // A narrow side light catches the charcoal cloth, without washing the foreground ghosts.
+        const witchContour = new THREE.SpotLight("#b7a4d8", 0, 5, .48, .65, 2)
+        witchContour.target.position.fromArray(presentationConfig.cameraPresets.witch.target)
+        witchContour.position.copy(witchContour.target.position).add(new THREE.Vector3(-1.25, 1.25, 1.55))
         const dawn = new THREE.PointLight("#ffce8a", 0, 11, 2)
         dawn.position.fromArray(presentationConfig.lights.exit)
-        scene.add(windowPulse, witchRim, dawn)
+        windowPulse.target.position.fromArray(presentationConfig.cameraPresets.witch.target)
+        witchRim.target.position.copy(windowPulse.target.position)
+        scene.add(windowPulse, windowPulse.target, witchRim, witchRim.target, witchContour, witchContour.target, dawn)
         const currentLight = lightProfile()
         const moonColor = new THREE.Color("#addfea")
         const revealColor = new THREE.Color("#b6a1d9")
@@ -197,6 +215,16 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
             for (let i = 0; i <= steps; i++) {
                 const t = i / steps
                 if (!isWalkable({ x: THREE.MathUtils.lerp(from.x, to.x, t), z: THREE.MathUtils.lerp(from.z, to.z, t) }, latest.current.doorOpen)) return false
+            }
+            // Character cloth is not a walking obstacle, but a shot must not fly through it.
+            const direction = to.clone().sub(from).normalize()
+            const ray = new THREE.Ray(from, direction)
+            for (const spirit of spirits.values()) {
+                spirit.root.updateMatrixWorld(true)
+                const cloth = new THREE.Box3().setFromObject(spirit.root).expandByScalar(.18)
+                if (cloth.containsPoint(from) || cloth.containsPoint(to)) return false
+                const hit = ray.intersectBox(cloth, new THREE.Vector3())
+                if (hit && from.distanceTo(hit) < distance) return false
             }
             return true
         }
@@ -220,17 +248,25 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
         function witchPose(walking: CameraPose): CameraPose {
             if (reducedMotion) return walking
             const preset = presentationConfig.cameraPresets.witch
-            const position = new THREE.Vector3().fromArray(preset.position)
-            // A cutscene must not fly through the desk if the player approached from the side aisle.
+            // Stay in front of the ghosts. Height clears Sprout; the left offset clears Pebble.
+            // Moving closer instead would put the camera inside their animated cloth.
+            const position = new THREE.Vector3().fromArray(preset.position).add(new THREE.Vector3(-.6, .9, -.3))
+            const target = new THREE.Vector3().fromArray(preset.target)
+            // From a side/rear aisle, hold position if furniture or a ghost obstructs the route.
             if (!routeIsClear(walking.position, position)) position.copy(walking.position)
-            return poseLookingAt(position, new THREE.Vector3().fromArray(preset.target), preset.fov)
+            const fitFov = THREE.MathUtils.radToDeg(2 * Math.atan(1.65 / Math.max(1, position.distanceTo(target))))
+            return poseLookingAt(position, target, THREE.MathUtils.clamp(Math.max(preset.fov, fitFov), 38, 68))
         }
         director = new CameraDirector(camera, {
             reducedMotion, focus: focusPose, witch: witchPose,
             onRevealChange: active => {
                 clearKeys(); updateTarget(null)
                 if (active) unlock()
-                if (!disposed) { setCinematicActive(active); latest.current.onCinematicChange?.(active) }
+                if (!disposed) {
+                    setCinematicActive(active); latest.current.onCinematicChange?.(active)
+                    // Start audio after update has advanced this frame; cancel must silence immediately.
+                    if (!active) syncAudio()
+                }
             }
         })
 
@@ -262,8 +298,19 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
             camera.updateProjectionMatrix()
             orientation.setFromQuaternion(camera.quaternion, "YXZ")
             needsRender = true
+            syncAudio()
         }
-        runtime.current = { lock, unlock, reset, clearKeys }
+        function syncAudio() {
+            camera.getWorldDirection(audioForward)
+            audioRight.crossVectors(audioForward, camera.up).normalize()
+            audioWindow.fromArray(presentationConfig.cameraPresets.witch.target).sub(camera.position).normalize()
+            audio.update({
+                active: latest.current.active && ready && !failed, muted: latest.current.soundMuted ?? false,
+                reveal: director?.isRevealing ? { token: latest.current.revealToken ?? 0, elapsed: director.elapsed, strength: director.revealStrength } : null,
+                pan: audioRight.dot(audioWindow) * .65
+            })
+        }
+        runtime.current = { lock, unlock, reset, clearKeys, syncAudio, unlockAudio: () => audio.unlock() }
 
         function updateTarget(id: MonsterId | null) {
             if (hovered === id) return
@@ -358,10 +405,16 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
                 latest.current.onLockChange(locked)
             }
         }
-        function onVisibility() { if (document.hidden) clearKeys() }
+        function onVisibility() {
+            if (document.hidden) clearKeys()
+            lastTime = performance.now()
+            audio.setHidden(document.hidden)
+            syncAudio()
+        }
         function onContextLost(event: Event) {
             event.preventDefault()
             failed = true
+            syncAudio()
             unlock()
             latest.current.onError("The graphics connection was interrupted. Reload the scene to continue.")
         }
@@ -405,7 +458,31 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
                 for (const material of materials) {
                     const pbr = material as THREE.MeshStandardMaterial
                     if (character && pbr.transparent) pbr.depthWrite = false
-                    if (/flame|hot.core|ember/i.test(pbr.name) && pbr.emissiveIntensity > 0) candleMaterials.set(pbr, pbr.emissiveIntensity)
+                    if (/flame|hot.core|ember|candle fire/i.test(pbr.name) && pbr.emissiveIntensity > 0) candleMaterials.set(pbr, pbr.emissiveIntensity)
+                    if (/window glass/i.test(pbr.name) && !windowMaterials.has(pbr)) {
+                        windowMaterials.set(pbr, { emission: pbr.emissive.clone(), intensity: pbr.emissiveIntensity })
+                        // World-space mist crosses pane boundaries; glass never becomes a tiled glowing panel.
+                        // Its normal emission is black, so this leaves the original unlit glass unchanged.
+                        pbr.onBeforeCompile = shader => {
+                            shader.vertexShader = shader.vertexShader
+                                .replace("#include <common>", "#include <common>\nvarying vec3 vWindowWorld;")
+                                .replace("#include <project_vertex>", "#include <project_vertex>\nvWindowWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;")
+                            shader.fragmentShader = shader.fragmentShader
+                                .replace("#include <common>", "#include <common>\nvarying vec3 vWindowWorld;")
+                                .replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
+                                    vec2 mistPosition = vWindowWorld.xy;
+                                    vec2 haloOffset = (mistPosition - vec2(-0.1, 2.8)) * vec2(0.60, 0.29);
+                                    float halo = exp(-dot(haloOffset, haloOffset));
+                                    float mist = 0.68
+                                        + 0.16 * sin(mistPosition.x * 2.1 + mistPosition.y * 1.3)
+                                        + 0.11 * sin(mistPosition.x * 1.4 - mistPosition.y * 2.0)
+                                        + 0.07 * sin(mistPosition.x * 3.7 + mistPosition.y * 0.8);
+                                    totalEmissiveRadiance *= (0.22 + 0.78 * halo) * clamp(mist, 0.30, 1.0);
+                                `)
+                        }
+                        pbr.customProgramCacheKey = () => "library-window-mist-v1"
+                        pbr.needsUpdate = true
+                    }
                     for (const key of textureProperties) {
                         const texture = (pbr as unknown as Record<string, unknown>)[key]
                         if (texture instanceof THREE.Texture) texture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 4)
@@ -452,6 +529,10 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
             aim.fromArray(presentationConfig.cameraPresets.wide.target)
             windowPulse.position.fromArray(presentationConfig.lights.window)
             witchRim.position.fromArray(presentationConfig.lights.witch)
+            windowPulse.target.position.fromArray(presentationConfig.cameraPresets.witch.target)
+            witchRim.target.position.copy(windowPulse.target.position)
+            witchContour.target.position.fromArray(presentationConfig.cameraPresets.witch.target)
+            witchContour.position.copy(witchContour.target.position).add(new THREE.Vector3(-1.25, 1.25, 1.55))
             dawn.position.fromArray(presentationConfig.lights.exit)
             reset()
             // Four localized practicals preserve warm/cool separation without eleven per-pixel lights.
@@ -483,6 +564,13 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
                 scene.add(gltf.scene)
                 if (IDS.includes(id as MonsterId)) {
                     gltf.scene.userData.monsterId = id
+                    gltf.scene.traverse(object => {
+                        if (!(object instanceof THREE.Mesh)) return
+                        for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+                            const pbr = material as THREE.MeshPhysicalMaterial
+                            if (!spiritMaterials.has(pbr)) spiritMaterials.set(pbr, { color: pbr.color.clone(), sheen: pbr.sheenColor?.clone() ?? null })
+                        }
+                    })
                     const spirit = animated(gltf)
                     spirits.set(id as MonsterId, spirit)
                     play(spirit, "Idle")
@@ -522,10 +610,10 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
                 texture.mapping = THREE.EquirectangularReflectionMapping
                 environment = pmrem.fromEquirectangular(texture)
                 scene.environment = environment.texture
-                scene.environmentIntensity = 0.18
+                scene.environmentIntensity = 0.085
                 scene.environmentRotation.y = THREE.MathUtils.degToRad(25)
                 scene.background = texture
-                scene.backgroundIntensity = 0.65
+                scene.backgroundIntensity = 0.42
                 scene.backgroundBlurriness = 0.15
                 scene.backgroundRotation.y = THREE.MathUtils.degToRad(25)
                 report("hdri", 1)
@@ -549,17 +637,19 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
         function frame(time: number) {
             if (disposed) return
             animationFrame = requestAnimationFrame(frame)
-            const delta = Math.min((time - lastTime) / 1000, 0.05)
+            const elapsed = cinematicFrameDelta(time, lastTime)
+            const delta = Math.min(elapsed, 0.05) // Collision and cloth simulation stay bounded.
             lastTime = time
             if (failed || document.hidden) return
             const state = latest.current
             if (ready && director) {
                 const wasOwned = director.movementBlocked
-                director.update(delta, state.active, state.focusMonster ?? null, state.revealToken ?? 0)
+                director.update(elapsed, state.active, state.focusMonster ?? null, state.revealToken ?? 0)
                 if (!wasOwned && director.movementBlocked) unlock()
                 if (wasOwned || director.movementBlocked) needsRender = true
                 if (!director.movementBlocked) orientation.setFromQuaternion(camera.quaternion, "YXZ")
             }
+            syncAudio()
             if (state.active && ready) {
                 if (state.interactive && !director?.movementBlocked) {
                     const pressed = keys.current
@@ -596,25 +686,35 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
                 const profile = lightProfile(state.presentation ?? "introduction")
                 const smoothing = 1 - Math.exp(-delta * 1.35)
                 for (const key of Object.keys(currentLight) as (keyof typeof currentLight)[]) currentLight[key] = THREE.MathUtils.lerp(currentLight[key], profile[key], smoothing)
-                const reveal = director?.revealStrength ?? 0
+                const cue = revealLighting(director?.isRevealing ? director.elapsed : -1)
+                const reveal = cue.presence
                 // Keep idle cloth solid; only the public won state fades its coverage.
                 const apparition = state.presentation === "won" ? currentLight.witch : 1
-                const globalDim = 1 - .14 * reveal
                 flickerLights.forEach(({ light, base, phase }) => {
-                    light.intensity = base * currentLight.candles * candleModulation(time / 1000, phase, reveal, reducedMotion)
+                    light.intensity = base * currentLight.candles * cue.candles * candleModulation(time / 1000, phase, cue.darkness, reducedMotion)
                 })
-                candleMaterials.forEach((base, material) => { material.emissiveIntensity = base * currentLight.candles * candleModulation(time / 1000, 0, reveal, reducedMotion) })
-                hemisphere.intensity = .28 * currentLight.hemisphere * globalDim
-                moon.intensity = 2.4 * currentLight.moon * (1 - .25 * reveal)
-                moon.color.copy(moonColor).lerp(revealColor, reveal * .58).lerp(goldColor, currentLight.dawn * .45)
-                ghostFill.intensity = 10 * currentLight.fill * globalDim
-                windowPulse.intensity = 18 * reveal
-                witchRim.intensity = .12 + reveal + (state.presentation === "lost" ? .9 : 0)
+                candleMaterials.forEach((base, material) => { material.emissiveIntensity = base * currentLight.candles * cue.candles * candleModulation(time / 1000, 0, cue.darkness, reducedMotion) })
+                hemisphere.intensity = .11 * currentLight.hemisphere * cue.fill
+                moon.intensity = 2.1 * currentLight.moon * cue.moon
+                moon.color.copy(moonColor).lerp(revealColor, reveal * .18).lerp(goldColor, currentLight.dawn * .45)
+                ghostFill.intensity = 4.2 * currentLight.fill * cue.fill
+                windowPulse.intensity = 29 * reveal
+                witchRim.intensity = .08 + 16 * reveal + (state.presentation === "lost" ? .9 : 0)
+                witchContour.intensity = 26 * reveal
+                // Every ghost recedes equally: this is a story cue, never a hint about the spy.
+                spiritMaterials.forEach((original, material) => {
+                    material.color.copy(original.color).multiplyScalar(1 - .78 * cue.darkness)
+                    if (original.sheen) material.sheenColor.copy(original.sheen).multiplyScalar(1 - .88 * cue.darkness)
+                })
+                windowMaterials.forEach((original, material) => {
+                    material.emissive.copy(original.emission).lerp(windowViolet, reveal)
+                    material.emissiveIntensity = THREE.MathUtils.lerp(original.intensity, 1.1, reveal)
+                })
                 dawn.intensity = 85 * currentLight.dawn
-                scene.environmentIntensity = .18 * currentLight.environment * globalDim
-                scene.backgroundIntensity = currentLight.background
+                scene.environmentIntensity = .085 * currentLight.environment * cue.environment
+                scene.backgroundIntensity = currentLight.background * cue.background
                 renderer.toneMappingExposure = currentLight.exposure
-                if (scene.fog instanceof THREE.FogExp2) scene.fog.density = currentLight.fog + .004 * reveal
+                if (scene.fog instanceof THREE.FogExp2) scene.fog.density = currentLight.fog + .006 * reveal
                 witchMaterials.forEach(({ material, opacity, emission, eyes }) => {
                     material.opacity = opacity * apparition
                     if (eyes) material.emissiveIntensity = emission * (.35 + .45 * reveal) * apparition
@@ -627,6 +727,7 @@ export const World = forwardRef<WorldHandle, WorldProps>(function World(props, r
 
         return () => {
             disposed = true
+            audio.dispose()
             abort.abort()
             director?.cancel()
             unlock()

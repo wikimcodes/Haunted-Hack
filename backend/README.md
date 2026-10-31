@@ -42,7 +42,9 @@ bun run dev                   # http://localhost:3001
 cd backend/server && bun run agents
 ```
 
-**Director View:** open http://localhost:3001/director on the judges' screen. It follows the newest game. While a game runs it stays locked with a countdown and a live feed of real Agent Relay messages (senders and words blurred so the spy stays secret), then shows the outcome, an information-flow graph, every Agent Relay message re-read from Relay, the witch's clues and the Terse event log. Click a clue to light up the Relay report that caused it.
+**Director View:** open http://localhost:3001/director on the judges' screen. The charcoal dashboard shows session metrics, observed message activity, a horizontal participant flow, Relay messages, clues and the Terse timeline. Use `?game=` to pin a session; otherwise it selects the latest available game. During play, counts and public omens are visible while identities, message text and actual routes stay hidden. After the ending, filters and clue selection trace real reports, upstream gossip, graph edges and events. A zero countdown still says “Awaiting outcome” until the server ends the game. All chart values come from the selected game; unavailable data is labeled explicitly. Sprout, Pebble, Momo and Witch use portraits rendered from the same exported character GLBs as the game. The graph shows all four public characters; message portraits appear only after private evidence unlocks. See `server/public/director-portraits/README.md` for source hashes and regeneration.
+
+The page is served from `server/public/director.html`, with explicit CSS/JS/model asset routes. Run its five data/privacy checks with `node --test server/public/director-model.test.mjs` from `backend/`. Browser QA covered completed and in-progress sessions, clue links, filters, session switching and the narrow layout.
 
 Check everything with `bun run smoke` (plays a short game, a forged-report attack and a dawn timeout). `SMOKE_SIDE=0 bun run smoke` runs only the main game.
 

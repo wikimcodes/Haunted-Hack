@@ -149,3 +149,34 @@ kbd { border: 1px solid #d1d7c94a; border-radius: 2px; padding: 3px 5px; font: i
 }
 @media (max-height: 700px) and (min-width: 701px) { .intro { margin-top: 45px; margin-bottom: 100px; } h1 { font-size: 82px; margin: 20px 0; } .intro-copy { margin-bottom: 20px; } .lobby-footer { position: relative; bottom: auto; margin-top: -40px; padding-bottom: 24px; } .lobby-image, .lobby-shade { min-height: 100%; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
+
+/* Scene sound and the separate Director screen share the existing quiet controls. */
+a.button { text-decoration: none; }
+.lobby-tools { display: flex; align-items: center; gap: 23px; }
+.director-entry { font-size: 10px; color: #d8d6c6; text-decoration: none; letter-spacing: .04em; white-space: nowrap; padding: 10px 0; }
+.director-entry:hover { color: #fff1d2; }
+.director-entry > span { margin-left: 7px; }
+.sound-button { background: transparent; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 5px; min-height: 40px; color: #d6d8ca; font-size: 10px; white-space: nowrap; border: 1px solid transparent; border-radius: 2px; }
+.sound-button svg { width: 19px; height: 19px; flex-shrink: 0; }
+.sound-button:hover { color: #fff1d2; background: #d6d8ca0c; }
+.sound-button[aria-pressed="false"] { color: #a9b2a7; }
+.sound-button.compact { min-width: 40px; padding: 9px; }
+.sound-resume { position: absolute; top: 72px; right: 32px; color: var(--gold); white-space: nowrap; }
+.menu-sound { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 15px; }
+.menu-sound > div > span { display: block; color: #ddd7c2; font-size: 11px; }
+.menu-sound small { display: block; color: #9cac98; font-size: 9px; line-height: 1.6; margin-top: 5px; }
+.audio-note { font-size: 10px !important; color: #b8c2b2; }
+.audio-note .text-button { display: block; }
+@media (min-width: 701px) { .app .world-drag-hint { display: none; } }
+@media (max-width: 700px) {
+  .lobby-header { align-items: flex-start; gap: 16px; }
+  .lobby-tools { gap: 6px; align-items: flex-end; flex-direction: column; }
+  .lobby-tools .sound-button { min-height: 32px; padding-block: 4px; }
+  .lobby-tools .director-entry { padding: 4px 0; }
+  .hud-top-actions { gap: 4px; }
+  .sound-resume { top: 112px; right: 20px; }
+  .menu-sound { gap: 9px; }
+  .menu-sound small { max-width: 170px; }
+}
+
+.sound-hint { display: block; margin-top: 6px; color: #b8bdae; }
