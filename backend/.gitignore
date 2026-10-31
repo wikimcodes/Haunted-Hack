@@ -6,3 +6,6 @@ actor/.durable-actors/
 actor/.terse/
 server/.relay.local.json
 relay-local/
+server/.relay-setup.json
+server/.relay-setup.local.json
+server/.relay*.tmp
