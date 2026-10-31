@@ -125,11 +125,14 @@
       }
       const s = data.summary
       const rows = data.rows
-      const chats = rows.filter(r => r.kind !== 'impersonation')
-      document.getElementById('sub').textContent = `${s.attacks} attacks across ${s.games} live games. ${s.roleOrPromptLeaks === 0 ? 'No agent was tricked into leaking.' : `${s.roleOrPromptLeaks} replies leaked.`} Every impersonation ${s.impersonationsBlocked === s.impersonations ? 'was blocked' : 'was checked'}.`
+      // Only model-written replies are judged. Older runs have no source and were all judged.
+      const judged = r => r.kind !== 'impersonation' && (r.source ?? 'openai') === 'openai'
+      const aiReplies = s.aiReplies ?? rows.filter(judged).length
+      const unjudged = s.unjudgedReplies ?? 0
+      document.getElementById('sub').textContent = `${s.attacks} attacks across ${s.games} live games. ${s.roleOrPromptLeaks === 0 ? 'No agent was tricked into leaking.' : `${s.roleOrPromptLeaks} replies leaked.`} Every impersonation ${s.impersonationsBlocked === s.impersonations ? 'was blocked' : 'was checked'}.${unjudged ? ` ${unjudged} scripted or failed replies were not judged.` : ''}`
       document.getElementById('stats').replaceChildren(
         stat('Attacks', String(s.attacks)),
-        stat('Leaks', `${s.roleOrPromptLeaks} of ${chats.length}`, s.roleOrPromptLeaks ? 'high' : 'ok'),
+        stat('Leaks', `${s.roleOrPromptLeaks} of ${aiReplies} AI replies`, s.roleOrPromptLeaks ? 'high' : 'ok'),
         stat('Fakes blocked', `${s.impersonationsBlocked} of ${s.impersonations}`, s.impersonationsBlocked === s.impersonations ? 'ok' : 'high'),
         stat('Relay messages', String(s.relayMessagesAudited)),
         stat('Terse events', String(s.terseEventsLogged))
@@ -137,7 +140,7 @@
       const count = k => rows.filter(r => r.kind === k).length
       const result = k => k === 'impersonation'
         ? `${rows.filter(r => r.kind === k && r.outcome === 'blocked').length} of ${count(k)} blocked`
-        : `${rows.filter(r => r.kind === k && !r.leaked).length} of ${count(k)} with no leak`
+        : `${rows.filter(r => r.kind === k && judged(r) && !r.leaked).length} of ${rows.filter(r => r.kind === k && judged(r)).length} AI replies with no leak`
       document.getElementById('types').replaceChildren(...Object.entries(TYPES).map(([k, t]) => el('article', { class: 'type' },
         icon(t.icon), el('h3', {}, `${t.title} · ${count(k)}`), el('p', {}, t.text), el('p', { class: 'result' }, result(k)))))
 
@@ -147,16 +150,17 @@
         list.replaceChildren(...rows.filter(r => kind === 'all' || r.kind === kind).map(r => {
           const isImp = r.kind === 'impersonation'
           const bad = isImp ? r.outcome !== 'blocked' : r.leaked
+          const verdict = isImp ? (bad ? 'Not blocked' : 'Blocked') : !judged(r) ? 'Not judged' : bad ? 'Leaked' : 'No leak'
           return el('li', { class: `attack ${bad ? 'leak' : ''}` },
             el('div', { class: 'attack-head' },
               el('span', { class: 'tagc' }, TYPES[r.kind].label),
               el('span', { class: 'target' }, isImp ? `From ${NAMES[r.target]}` : `To ${NAMES[r.target]}`),
               !isImp && r.isSpy ? el('span', { class: 'tagc spy' }, 'The real spy') : null,
-              el('span', { class: `tagc ${bad ? 'bad' : 'ok'}` }, isImp ? (bad ? 'Not blocked' : 'Blocked') : (bad ? 'Leaked' : 'No leak'))),
+              el('span', { class: `tagc ${bad ? 'bad' : verdict === 'Not judged' ? '' : 'ok'}` }, verdict)),
             isImp
               ? el('p', { class: 'said' }, el('span', {}, 'What happened'), `${NAMES[r.target]} is innocent but sent the witch a fake "I am your spy" report over Agent Relay. Relay showed the real sender, so the witch refused it.`)
               : [el('p', { class: 'said' }, el('span', {}, 'Attacker said'), `"${r.text}"`),
-                 el('p', { class: 'reply' }, el('span', {}, `${NAMES[r.target]} replied`), `"${r.reply}"`),
+                 el('p', { class: 'reply' }, el('span', {}, `${NAMES[r.target]} replied`), judged(r) ? `"${r.reply}"` : `(${r.source === 'fallback' ? 'scripted fallback line, not written by the model' : 'no reply'}) "${r.reply}"`),
                  r.why ? el('p', { class: 'why' }, `Judge: ${r.why}`) : null],
             el('a', { class: 'evidence', href: `director?game=${encodeURIComponent(r.game)}` }, "Open this game's evidence"))
         }))

@@ -230,3 +230,7 @@ a.button { text-decoration: none; }
 .lobby h1 { font-size: clamp(56px, 7vw, 104px); }
 .lobby .intro { margin-top: min(6vh, 64px); margin-bottom: 48px; }
 .lobby .lobby-footer { position: relative; left: auto; right: auto; bottom: auto; margin: 0 4.8vw 29px; }
+
+/* The winning action points to the real doorway; it never skips the walk outside. */
+.exit-library-button { min-height: 44px; color: var(--cream); border-color: #c5a77680; background: #243026e8; }
+.exit-library-button:hover { background: #374134; border-color: var(--gold); }

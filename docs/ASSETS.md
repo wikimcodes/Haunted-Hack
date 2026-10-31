@@ -47,3 +47,9 @@ The standalone exporter returns an `asset` record and does not modify the shared
 For web delivery, compress the new GLB with the same WebP/Meshopt pipeline, keep morph targets and animated weights enabled, and compare triangle counts, clip names/durations and morph channels with the source export. Publish the compressed GLB, both relevant validation reports and the updated manifests under `frontend-game/public/assets/library/`. Keep camera/light anchors in `presentation-manifest.json` aligned with any placement change. A static mesh with a clip named `Idle` is insufficient: the reimported cloth must actually deform.
 
 The Director screen opens as a separate tab and consumes real backend evidence; it is not part of the Blender asset bundle. The frontend also includes two sound assets generated with the ElevenLabs Sound Effects API: a 29.5-second room loop and a six-second Witch Reveal cue, totaling 570,181 bytes. Playback follows the cinematic clock, supports persisted mute, and pauses in hidden tabs and the menu. See [audio provenance and regeneration](../frontend-game/public/audio/README.md).
+
+## Walkable escape courtyard
+
+The web client adds a lightweight 3D cloister in `frontend-game/src/world/escapeExterior.ts`, using the library’s existing stone and bark material maps. It has continuous stone paving, side arches, parapets, grass, trees and dawn terrain/sky; it is geometry, not a backdrop image. The six exported GLBs stay unchanged.
+
+The measured masonry opening is centered at z=−2.90, with the outer wall face at x=3.81. The door root at z=−3.65 is the hinge, not the opening center. The floor joins the existing sill at x=3.70, y=0.04. Collision opens only after the door clip reaches its end, then permits passage into the bounded courtyard. `exitJourney.ts` requires an actual outward threshold crossing and x≥9.6 before completing; button clicks and camera jumps cannot finish escape.

@@ -261,7 +261,7 @@ function redTeamCard() {
   const fill = data => {
     if (!data?.summary) { card.remove(); return }
     const s = data.summary
-    const chats = s.attacks - s.impersonations
+    const chats = s.aiReplies ?? s.attacks - s.impersonations
     const stat = (label, value, tone = '') => el('div', { class: `sec-stat ${tone}` }, el('span', {}, label), el('strong', {}, value))
     card.replaceChildren(
       el('div', { class: 'redteam-head' },
@@ -270,7 +270,7 @@ function redTeamCard() {
         el('a', { class: 'redteam-link', href: prefix + '/redteam' }, 'Open full report')),
       el('div', { class: 'sec-stats' },
         stat('Attacks', String(s.attacks)),
-        stat('Leaks', `${s.roleOrPromptLeaks} of ${chats}`, s.roleOrPromptLeaks ? 'high' : 'ok'),
+        stat('Leaks', `${s.roleOrPromptLeaks} of ${chats} AI replies`, s.roleOrPromptLeaks ? 'high' : 'ok'),
         stat('Fakes blocked', `${s.impersonationsBlocked} of ${s.impersonations}`, s.impersonationsBlocked === s.impersonations ? 'ok' : 'high'),
         stat('Relay messages', String(s.relayMessagesAudited))))
   }

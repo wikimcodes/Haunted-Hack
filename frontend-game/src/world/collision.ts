@@ -6,6 +6,9 @@ export const EYE_HEIGHT = 1.65
 export const PLAYER_RADIUS = 0.23
 export const SPAWN: Point2 = { x: -0.7, z: 4.35 }
 export const ROOM = { minX: -3.26, maxX: 3.26, minZ: -7.58, maxZ: 4.72 }
+// Measured from the exported masonry opening. The door root is its hinge, not its center.
+export const EXIT_DOOR = { minZ: -3.65, maxZ: -2.15, centerZ: -2.90, wallOutsideX: 3.81 }
+export const COURTYARD = { minX: 4.0, maxX: 15, minZ: -7.0, maxZ: 1.2 }
 export const OBSTACLES: readonly Obstacle[] = [
     { name: "left bookcases", minX: -3.6, maxX: -2.59, minZ: -7.15, maxZ: 4.4, height: 6.2 },
     { name: "reading counters", minX: -3.04, maxX: -1.96, minZ: -5.05, maxZ: 4.345, height: 1.04 },
@@ -16,10 +19,22 @@ export const OBSTACLES: readonly Obstacle[] = [
 ]
 
 const EPSILON = 0.0001
-const EXIT = { minZ: -4.25, maxZ: -3.05, maxX: 4.22 }
 
 function overlaps(p: Point2, box: Obstacle, radius: number): boolean {
     return p.x > box.minX - radius && p.x < box.maxX + radius && p.z > box.minZ - radius && p.z < box.maxZ + radius
+}
+
+/** Connected room, narrow masonry passage, then the broader exterior landing. */
+function withinBoundary(p: Point2, doorOpen: boolean, radius: number): boolean {
+    const inRoom = p.x >= ROOM.minX + radius && p.x <= ROOM.maxX - radius
+        && p.z >= ROOM.minZ + radius && p.z <= ROOM.maxZ - radius
+    if (inRoom) return true
+    if (!doorOpen) return false
+    const inDoorway = p.x >= ROOM.maxX - radius && p.x <= COURTYARD.minX + radius
+        && p.z >= EXIT_DOOR.minZ + radius && p.z <= EXIT_DOOR.maxZ - radius
+    const inCourtyard = p.x >= COURTYARD.minX + radius && p.x <= COURTYARD.maxX - radius
+        && p.z >= COURTYARD.minZ + radius && p.z <= COURTYARD.maxZ - radius
+    return inDoorway || inCourtyard
 }
 
 /** Fixed-height walking with substeps. Axis separation lets the player slide along furniture. */
@@ -46,19 +61,14 @@ export function moveWithCollisions(
                 // If an invalid starting point would snap through a whole obstacle, stay put.
                 if (Math.abs(p[axis] - previous) > Math.abs(step[axis]) + 0.01) p[axis] = previous
             }
-            const inExit = doorOpen && p.z >= EXIT.minZ + radius && p.z <= EXIT.maxZ - radius
-            p.x = Math.max(ROOM.minX + radius, Math.min(inExit ? EXIT.maxX - radius : ROOM.maxX - radius, p.x))
-            p.z = Math.max(ROOM.minZ + radius, Math.min(ROOM.maxZ - radius, p.z))
-            if (p.x > ROOM.maxX - radius && doorOpen) {
-                p.z = Math.max(EXIT.minZ + radius, Math.min(EXIT.maxZ - radius, p.z))
-            }
+            // Reject crossing a wall rather than clamping to another region: otherwise an
+            // exterior step could snap through the jamb or along the closed side wall.
+            if (!withinBoundary(p, doorOpen, radius)) p[axis] = previous
         }
     }
     return p
 }
 
 export function isWalkable(p: Point2, doorOpen = false): boolean {
-    const inRoom = p.x >= ROOM.minX + PLAYER_RADIUS && p.x <= ROOM.maxX - PLAYER_RADIUS && p.z >= ROOM.minZ + PLAYER_RADIUS && p.z <= ROOM.maxZ - PLAYER_RADIUS
-    const inExit = doorOpen && p.x <= EXIT.maxX - PLAYER_RADIUS && p.x >= ROOM.maxX - PLAYER_RADIUS && p.z >= EXIT.minZ + PLAYER_RADIUS && p.z <= EXIT.maxZ - PLAYER_RADIUS
-    return (inRoom || inExit) && !OBSTACLES.some(box => overlaps(p, box, PLAYER_RADIUS))
+    return withinBoundary(p, doorOpen, PLAYER_RADIUS) && !OBSTACLES.some(box => overlaps(p, box, PLAYER_RADIUS))
 }
