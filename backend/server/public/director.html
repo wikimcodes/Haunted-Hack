@@ -233,7 +233,7 @@ async function renderLocked() {
     el("ul", { class: "feed" }, live.rows.slice().reverse().slice(0, 12).map(r => el("li", { class: fresh.has(r.relayMessageId) ? "new" : "" },
       el("span", { class: "t" }, state ? `+${clockOf(r.at - state.startedAt)}` : ""),
       el("span", {},
-        el("span", { class: "who" }, r.kind === "handoff" ? "Game master → a monster" : "A monster whispered"),
+        el("span", { class: "who" }, r.kind === "handoff" ? "Game master → a ghost" : "A ghost whispered"),
         el("span", { class: "redacted", style: `width:${Math.min(40 + r.length * 2, 260)}px`, "aria-label": "hidden message" })),
       el("span", { class: "id" }, r.relayMessageId)
     )))
