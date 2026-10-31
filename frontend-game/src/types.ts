@@ -70,6 +70,6 @@ export const ANIMATION_FOR_MOOD: Record<Mood, string> = {
     idle: "Idle",
     talking: "Talk",
     thinking: "Think",
-    nervous: "Nervous",
+    nervous: "Think",
     accused: "Accused"
 }

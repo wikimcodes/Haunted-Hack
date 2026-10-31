@@ -1,0 +1,237 @@
+{
+  "tool": "glTF Transform 4.5.1",
+  "compression": "WebP quality90 + Meshopt medium; 16-bit positions,12-bit normals,14-bit UV where applicable; tiled UVs retained at full precision. No simplification.",
+  "assets": {
+    "environment": {
+      "originalBytes": 58740172,
+      "webBytes": 10942860,
+      "geometryAndAnimationChecks": {
+        "triangles": 326331,
+        "clips": {},
+        "morphPrimitives": 0,
+        "rgbaMorphPrimitives": 0,
+        "meshes": 1,
+        "primitives": 37,
+        "nodes": 1,
+        "materials": 37
+      },
+      "extensionsRequired": [
+        "EXT_meshopt_compression",
+        "EXT_texture_webp",
+        "KHR_mesh_quantization",
+        "KHR_texture_transform"
+      ]
+    },
+    "sprout": {
+      "originalBytes": 1196396,
+      "webBytes": 319516,
+      "geometryAndAnimationChecks": {
+        "triangles": 23456,
+        "clips": {
+          "Idle": {
+            "duration": 5,
+            "paths": [
+              "rotation",
+              "translation",
+              "weights"
+            ]
+          },
+          "Talk": {
+            "duration": 2,
+            "paths": [
+              "rotation",
+              "translation",
+              "weights"
+            ]
+          },
+          "Think": {
+            "duration": 3,
+            "paths": [
+              "rotation",
+              "translation",
+              "weights"
+            ]
+          },
+          "Accused": {
+            "duration": 1.5,
+            "paths": [
+              "rotation",
+              "translation",
+              "weights"
+            ]
+          }
+        },
+        "morphPrimitives": 2,
+        "rgbaMorphPrimitives": 2,
+        "meshes": 3,
+        "primitives": 4,
+        "nodes": 5,
+        "materials": 3
+      },
+      "extensionsRequired": [
+        "EXT_meshopt_compression",
+        "EXT_texture_webp",
+        "KHR_mesh_quantization"
+      ]
+    },
+    "pebble": {
+      "originalBytes": 1196408,
+      "webBytes": 320372,
+      "geometryAndAnimationChecks": {
+        "triangles": 23456,
+        "clips": {
+          "Idle": {
+            "duration": 5,
+            "paths": [
+              "rotation",
+              "translation",
+              "weights"
+            ]
+          },
+          "Talk": {
+            "duration": 2,
+            "paths": [
+              "rotation",
+              "translation",
+              "weights"
+            ]
+          },
+          "Think": {
+            "duration": 3,
+            "paths": [
+              "rotation",
+              "translation",
+              "weights"
+            ]
+          },
+          "Accused": {
+            "duration": 1.5,
+            "paths": [
+              "rotation",
+              "translation",
+              "weights"
+            ]
+          }
+        },
+        "morphPrimitives": 2,
+        "rgbaMorphPrimitives": 2,
+        "meshes": 3,
+        "primitives": 4,
+        "nodes": 5,
+        "materials": 3
+      },
+      "extensionsRequired": [
+        "EXT_meshopt_compression",
+        "EXT_texture_webp",
+        "KHR_mesh_quantization"
+      ]
+    },
+    "momo": {
+      "originalBytes": 1196400,
+      "webBytes": 318796,
+      "geometryAndAnimationChecks": {
+        "triangles": 23456,
+        "clips": {
+          "Idle": {
+            "duration": 5,
+            "paths": [
+              "rotation",
+              "translation",
+              "weights"
+            ]
+          },
+          "Talk": {
+            "duration": 2,
+            "paths": [
+              "rotation",
+              "translation",
+              "weights"
+            ]
+          },
+          "Think": {
+            "duration": 3,
+            "paths": [
+              "rotation",
+              "translation",
+              "weights"
+            ]
+          },
+          "Accused": {
+            "duration": 1.5,
+            "paths": [
+              "rotation",
+              "translation",
+              "weights"
+            ]
+          }
+        },
+        "morphPrimitives": 2,
+        "rgbaMorphPrimitives": 2,
+        "meshes": 3,
+        "primitives": 4,
+        "nodes": 5,
+        "materials": 3
+      },
+      "extensionsRequired": [
+        "EXT_meshopt_compression",
+        "EXT_texture_webp",
+        "KHR_mesh_quantization"
+      ]
+    },
+    "door": {
+      "originalBytes": 6523012,
+      "webBytes": 708164,
+      "geometryAndAnimationChecks": {
+        "triangles": 7722,
+        "clips": {
+          "Open": {
+            "duration": 2.9583332538604736,
+            "paths": [
+              "rotation"
+            ]
+          }
+        },
+        "morphPrimitives": 0,
+        "rgbaMorphPrimitives": 0,
+        "meshes": 57,
+        "primitives": 57,
+        "nodes": 60,
+        "materials": 5
+      },
+      "extensionsRequired": [
+        "EXT_meshopt_compression",
+        "EXT_texture_webp",
+        "KHR_mesh_quantization"
+      ]
+    },
+    "witch": {
+      "originalBytes": 625048,
+      "webBytes": 203176,
+      "geometryAndAnimationChecks": {
+        "triangles": 15924,
+        "clips": {
+          "Idle": {
+            "duration": 8,
+            "paths": [
+              "rotation",
+              "translation",
+              "weights"
+            ]
+          }
+        },
+        "morphPrimitives": 1,
+        "normalMappedMaterials": 1,
+        "meshes": 6,
+        "primitives": 7,
+        "nodes": 8,
+        "materials": 4
+      },
+      "extensionsRequired": [
+        "EXT_meshopt_compression",
+        "EXT_texture_webp",
+        "KHR_mesh_quantization"
+      ],
+      "clothSheenMaxFactor": 0.03200000151991844
+    }
+  }
+}

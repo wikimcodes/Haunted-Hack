@@ -1,0 +1,336 @@
+{
+  "project": "The Spy Monster \u2014 Cinematic Library",
+  "schemaVersion": 1,
+  "sourceScene": "Cinematic_Library",
+  "sourceBlendFile": "the_spy_monster_cinematic.blend (editable source retained separately)",
+  "coordinateSystem": "Three.js/glTF Y-up; Blender (x,y,z) becomes (x,z,-y).",
+  "units": "meters",
+  "placementNote": "All individual characters and the escape door have identity asset roots. Apply listed position, quaternion and scale to recreate the library arrangement. Environment geometry retains world positions and excludes the animated door leaf and lock; its masonry frame remains included.",
+  "animationNote": "Use AnimationMixer on each GLTF scene. Monster clip names: Idle, Talk, Think, Accused; all include deforming cloth and streamer shape keys. Idle and Talk loop; Think and Accused are one-shot reactions. Door clip: Open, played once with clampWhenFinished=true after a correct accusation. Witch: 8-second Idle with actual cloak morph; runtime controls presence and reveal lights.",
+  "doorNote": "Play Open once with clampWhenFinished=true. The door is exported separately from the static environment; any lock controls remain a runtime concern.",
+  "renderNote": "Blender cinematic lights, volumetric atmosphere, compositor glow and camera objects are not included in GLBs; recreate these in the target runtime using the manifest camera parameters. Candle geometry exports, point lights do not. Hidden CINEMATIC_EXTERIOR objects are excluded. The visible forest and world lighting use Mossy Forest HDRI, supplied separately at textures/environment/mossy_forest_2k.hdr; load it separately because world HDRIs are not embedded in environment.glb.",
+  "spiritMaterialNote": "SpiritVeil vertex COLOR_0 carries both tint and opacity; keep vertex colors and alpha blending when replacing glTF materials. PBR normal maps remain embedded where used.",
+  "camera": {
+    "name": "Camera_Cinematic",
+    "type": "PERSP",
+    "position": [
+      -0.7,
+      1.65,
+      4.7
+    ],
+    "target": [
+      -1.902776,
+      2.390168,
+      -5.199771
+    ],
+    "up": [
+      0.008927,
+      0.997257,
+      0.073476
+    ],
+    "fov": 29.83937,
+    "aspect": 1.7777778,
+    "near": 0.05000000074505806,
+    "far": 150.0,
+    "note": "PerspectiveCamera: position.set(...position); up.set(...up); lookAt(...target)."
+  },
+  "assets": {
+    "environment": {
+      "file": "environment.glb",
+      "bytes": 10942860,
+      "triangles": 326331,
+      "meshes": 1,
+      "primitives": 37,
+      "materials": 37,
+      "nodes": 1,
+      "animations": [],
+      "validation": "Source Blender reimport plus web compression geometry/animation/RGBA structure checks; browser uses MeshoptDecoder.",
+      "placement": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ],
+        "rotationY": 0
+      }
+    },
+    "sprout": {
+      "file": "sprout.glb",
+      "bytes": 319516,
+      "triangles": 23456,
+      "meshes": 3,
+      "primitives": 4,
+      "materials": 3,
+      "nodes": 5,
+      "animations": [
+        {
+          "name": "Idle",
+          "durationSeconds": 5,
+          "channels": 3,
+          "weightChannels": 1
+        },
+        {
+          "name": "Talk",
+          "durationSeconds": 2,
+          "channels": 3,
+          "weightChannels": 1
+        },
+        {
+          "name": "Think",
+          "durationSeconds": 3,
+          "channels": 3,
+          "weightChannels": 1
+        },
+        {
+          "name": "Accused",
+          "durationSeconds": 1.5,
+          "channels": 3,
+          "weightChannels": 1
+        }
+      ],
+      "validation": "Source Blender reimport plus web compression geometry/animation/RGBA structure checks; browser uses MeshoptDecoder.",
+      "placement": {
+        "position": [
+          -0.7,
+          0.48,
+          -3.4
+        ],
+        "quaternion": [
+          0.0,
+          0.0699428,
+          -0.0,
+          0.997551
+        ],
+        "scale": [
+          0.7,
+          0.7,
+          0.7
+        ],
+        "rotationY": 0.14,
+        "blenderPosition": [
+          -0.7,
+          3.4,
+          0.48
+        ]
+      }
+    },
+    "pebble": {
+      "file": "pebble.glb",
+      "bytes": 320372,
+      "triangles": 23456,
+      "meshes": 3,
+      "primitives": 4,
+      "materials": 3,
+      "nodes": 5,
+      "animations": [
+        {
+          "name": "Idle",
+          "durationSeconds": 5,
+          "channels": 3,
+          "weightChannels": 1
+        },
+        {
+          "name": "Talk",
+          "durationSeconds": 2,
+          "channels": 3,
+          "weightChannels": 1
+        },
+        {
+          "name": "Think",
+          "durationSeconds": 3,
+          "channels": 3,
+          "weightChannels": 1
+        },
+        {
+          "name": "Accused",
+          "durationSeconds": 1.5,
+          "channels": 3,
+          "weightChannels": 1
+        }
+      ],
+      "validation": "Source Blender reimport plus web compression geometry/animation/RGBA structure checks; browser uses MeshoptDecoder.",
+      "placement": {
+        "position": [
+          0.85,
+          1.3,
+          -4.8
+        ],
+        "quaternion": [
+          0.0,
+          -0.059964,
+          -0.0,
+          0.9982005
+        ],
+        "scale": [
+          0.86,
+          0.86,
+          0.86
+        ],
+        "rotationY": -0.12,
+        "blenderPosition": [
+          0.85,
+          4.8,
+          1.3
+        ]
+      }
+    },
+    "momo": {
+      "file": "momo.glb",
+      "bytes": 318796,
+      "triangles": 23456,
+      "meshes": 3,
+      "primitives": 4,
+      "materials": 3,
+      "nodes": 5,
+      "animations": [
+        {
+          "name": "Idle",
+          "durationSeconds": 5,
+          "channels": 3,
+          "weightChannels": 1
+        },
+        {
+          "name": "Talk",
+          "durationSeconds": 2,
+          "channels": 3,
+          "weightChannels": 1
+        },
+        {
+          "name": "Think",
+          "durationSeconds": 3,
+          "channels": 3,
+          "weightChannels": 1
+        },
+        {
+          "name": "Accused",
+          "durationSeconds": 1.5,
+          "channels": 3,
+          "weightChannels": 1
+        }
+      ],
+      "validation": "Source Blender reimport plus web compression geometry/animation/RGBA structure checks; browser uses MeshoptDecoder.",
+      "placement": {
+        "position": [
+          1.55,
+          0.65,
+          -3.6
+        ],
+        "quaternion": [
+          0.0,
+          -0.0998334,
+          -0.0,
+          0.9950042
+        ],
+        "scale": [
+          0.6,
+          0.6,
+          0.6
+        ],
+        "rotationY": -0.2,
+        "blenderPosition": [
+          1.55,
+          3.6,
+          0.65
+        ]
+      }
+    },
+    "door": {
+      "file": "door.glb",
+      "bytes": 708164,
+      "triangles": 7722,
+      "meshes": 57,
+      "primitives": 57,
+      "materials": 5,
+      "nodes": 60,
+      "animations": [
+        {
+          "name": "Open",
+          "durationSeconds": 2.958333,
+          "channels": 1,
+          "weightChannels": 0
+        }
+      ],
+      "validation": "Source Blender reimport plus web compression geometry/animation/RGBA structure checks; browser uses MeshoptDecoder.",
+      "placement": {
+        "position": [
+          3.51,
+          0.03,
+          -3.65
+        ],
+        "quaternion": [
+          0.0,
+          -0.7071067,
+          -0.0,
+          0.7071068
+        ],
+        "scale": [
+          0.72,
+          0.72,
+          0.72
+        ],
+        "rotationY": -1.5707963,
+        "blenderPosition": [
+          3.51,
+          3.65,
+          0.03
+        ]
+      }
+    },
+    "witch": {
+      "file": "witch.glb",
+      "bytes": 203176,
+      "triangles": 15924,
+      "meshes": 6,
+      "primitives": 7,
+      "nodes": 8,
+      "materials": 4,
+      "normalMappedMaterials": 1,
+      "animations": [
+        {
+          "name": "Idle",
+          "durationSeconds": 8.0,
+          "channels": 3,
+          "weightChannels": 1,
+          "weights": [
+            {
+              "target": "Witch_Cloak",
+              "range": 0.7199999913573265
+            }
+          ]
+        }
+      ],
+      "morphPrimitives": 1,
+      "maximumMorphDeltaMeters": 0.03273,
+      "placement": {
+        "position": [
+          0.0,
+          0.1,
+          -6.65
+        ],
+        "quaternion": [
+          0.0,
+          0.0,
+          -0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rotationY": 0.0
+      },
+      "validation": "Source Blender reimport/Idle deformation and compressed geometry/animation/normal-map checks; browser uses MeshoptDecoder."
+    }
+  },
+  "totalBytes": 12812884,
+  "totalTriangles": 420345,
+  "webCompression": "WebP quality90 + Meshopt medium; 16-bit positions,12-bit normals,14-bit UV where applicable; tiled UVs retained at full precision. No simplification.",
+  "originalExportsCommit": "dd9ccf6",
+  "presentationManifest": "presentation-manifest.json"
+}
